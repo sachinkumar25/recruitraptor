@@ -9,7 +9,7 @@ import PyPDF2
 from docx import Document
 import structlog
 
-from shared.utils.logger import get_logger
+from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import Field, BaseModel, validator
 from enum import Enum
 
 class FileType(str, Enum):

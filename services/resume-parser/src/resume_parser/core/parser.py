@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 import structlog
 
-from shared.utils.logger import get_logger
+from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 

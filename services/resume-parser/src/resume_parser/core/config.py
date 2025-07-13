@@ -2,7 +2,8 @@
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -25,6 +26,16 @@ class Settings(BaseSettings):
     # File processing settings
     max_file_size_mb: int = Field(default=5, description="Maximum file size in MB")
     min_word_count: int = Field(default=100, description="Minimum word count requirement")
+    min_content_words: int = Field(default=100, description="Minimum content words requirement")
+    processing_timeout_seconds: int = Field(default=300, description="Processing timeout in seconds")
+    
+    # Parsing settings
+    confidence_threshold: float = Field(default=0.5, description="Minimum confidence threshold for extracted fields")
+    
+    # External API settings
+    github_token: Optional[str] = Field(default=None, description="GitHub API token")
+    serpapi_key: Optional[str] = Field(default=None, description="SerpAPI key for web search")
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     
     # Logging settings
     log_level: str = Field(default="INFO", description="Logging level")

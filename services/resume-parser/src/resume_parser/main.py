@@ -9,7 +9,7 @@ import uvicorn
 
 from .api.routes import router
 from .core.config import get_settings
-from shared.utils.logger import configure_logging, get_logger
+from src.resume_parser.utils.logger import configure_logging, get_logger
 
 # Configure logging
 configure_logging()

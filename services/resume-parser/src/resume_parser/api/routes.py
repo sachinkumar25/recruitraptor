@@ -12,7 +12,7 @@ from ..core.models import (
     ResumeUploadResponse, HealthCheckResponse, ErrorResponse,
     create_error_response, create_health_response, FileType
 )
-from shared.utils.logger import get_logger
+from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -160,7 +160,6 @@ async def get_supported_types():
         "min_word_count": text_extractor.MIN_WORD_COUNT
     }
 
-@router.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
     """Custom HTTP exception handler."""
     error_response = create_error_response(
@@ -173,7 +172,6 @@ async def http_exception_handler(request, exc):
         content=error_response.dict()
     )
 
-@router.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """General exception handler for unexpected errors."""
     logger.error("Unhandled exception", error=str(exc))
