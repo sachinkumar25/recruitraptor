@@ -1,0 +1,61 @@
+John Smith
+Senior Software Engineer
+Email: john.smith@gmail.com
+Phone: (555) 123-4567
+Location: San Francisco, CA
+LinkedIn: https://linkedin.com/in/johnsmith
+GitHub: https://github.com/johnsmith
+
+EDUCATION
+Stanford University
+Bachelor of Science in Computer Science
+Graduated: June 2020
+GPA: 3.8/4.0
+Dean's List, Summa Cum Laude
+Relevant Coursework: Data Structures, Algorithms, Machine Learning, Database Systems
+
+PROFESSIONAL EXPERIENCE
+Senior Software Engineer | Google Inc. | January 2022 - Present
+- Led development of microservices architecture serving over one million active users daily
+- Implemented comprehensive CI/CD pipelines reducing deployment time by fifty percent
+- Mentored three junior developers and conducted thorough code reviews
+- Designed and optimized database schemas improving query performance by forty percent
+- Technologies: Python, Kubernetes, PostgreSQL, Redis, Docker, Jenkins
+
+Software Engineer | Meta Platforms | June 2020 - December 2021
+- Built responsive React applications using TypeScript for internal productivity tools
+- Developed robust RESTful APIs using Django and FastAPI frameworks
+- Collaborated with cross-functional teams to deliver features for millions of users
+- Optimized database queries and caching strategies improving performance by thirty percent
+- Technologies: React, TypeScript, Django, FastAPI, MySQL, Redis, AWS
+
+Software Engineering Intern | Microsoft Corporation | June 2019 - August 2019
+- Developed automation tools for Azure cloud infrastructure management
+- Implemented monitoring dashboards using Power BI and custom analytics
+- Participated in agile development processes and sprint planning
+- Technologies: C#, .NET, Azure, SQL Server, Power BI
+
+TECHNICAL SKILLS
+Programming Languages: Python, JavaScript, TypeScript, Java, Go, C++, SQL, Bash
+Web Frameworks: Django, FastAPI, React, Node.js, Express, Flask, Spring Boot
+Databases: PostgreSQL, MySQL, Redis, MongoDB, Elasticsearch, DynamoDB
+Cloud Platforms: AWS, Google Cloud Platform, Microsoft Azure, Docker, Kubernetes
+Tools & Technologies: Git, Jenkins, Jira, VS Code, Postman, Slack, Linux, Nginx
+
+PROJECTS
+Real-time Chat Application (2021)
+- Built scalable chat application using WebSocket connections and Redis pub/sub
+- Implemented user authentication, message encryption, and file sharing capabilities
+- Deployed on AWS with auto-scaling and load balancing for high availability
+
+E-commerce Platform (2020)
+- Developed full-stack e-commerce platform with payment integration
+- Implemented shopping cart, inventory management, and order tracking systems
+- Used React frontend with Django backend and PostgreSQL database
+
+CERTIFICATIONS AND ACHIEVEMENTS
+- AWS Certified Solutions Architect - Associate (2021)
+- Google Cloud Professional Cloud Architect (2022)
+- Kubernetes Certified Application Developer (2021)
+- Winner, Stanford Computer Science Hackathon (2019)
+- Published research paper on distributed systems optimization (2020)

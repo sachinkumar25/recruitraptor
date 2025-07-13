@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
-from pydantic import Field, BaseModel, validator
+from pydantic import Field, BaseModel, field_validator
 from enum import Enum
 
 class FileType(str, Enum):
@@ -63,9 +63,9 @@ class ParsingMetadata(BaseModel):
     total_words: int = Field(description="Total number of words in the resume")
     parsing_timestamp: str = Field(description="ISO timestamp of when parsing occurred")
     confidence_overall: float = Field(ge=0.0, le=1.0, description="Overall confidence score")
-    extraction_method: Optional[str] = Field(description="Method used for text extraction")
-    encoding: Optional[str] = Field(description="Text encoding detected")
-    word_count: int = Field(description="Number of words extracted")
+    extraction_method: Optional[str] = Field(default=None, description="Method used for text extraction")
+    encoding: Optional[str] = Field(default=None, description="Text encoding detected")
+    word_count: Optional[int] = Field(default=None, description="Number of words extracted")
     extraction_errors: List[str] = Field(default_factory=list, description="Any errors during extraction")
 
 class ParsedResume(BaseModel):
@@ -121,7 +121,8 @@ class ValidationErrorResponse(BaseModel):
 class ParsedResumeValidator:
     """Custom validators for ParsedResume model."""
     
-    @validator('metadata')
+    @field_validator('metadata')
+    @classmethod
     def validate_metadata(cls, v):
         """Validate metadata fields."""
         if v.total_words < 0:
@@ -130,7 +131,8 @@ class ParsedResumeValidator:
             raise ValueError("Confidence must be between 0.0 and 1.0")
         return v
     
-    @validator('personal_info', 'education', 'experience', 'skills')
+    @field_validator('personal_info', 'education', 'experience', 'skills')
+    @classmethod
     def validate_section_confidence(cls, v):
         """Validate section confidence scores."""
         if hasattr(v, 'confidence') and (v.confidence < 0 or v.confidence > 1):

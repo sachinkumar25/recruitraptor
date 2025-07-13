@@ -84,6 +84,13 @@ async def upload_resume(
         # Parse resume text
         parsed_data = resume_parser.parse(extracted_text)
         
+        # Merge extraction metadata with parsing metadata
+        parsed_data['metadata'].update({
+            'extraction_method': extraction_metadata.get('extraction_method'),
+            'encoding': extraction_metadata.get('encoding'),
+            'word_count': extraction_metadata.get('word_count')
+        })
+        
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
         

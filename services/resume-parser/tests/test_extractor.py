@@ -44,7 +44,7 @@ class TestTextExtractor:
     
     def test_extract_txt_success(self):
         """Test successful TXT file extraction."""
-        content = b"This is a test resume with more than 100 words. " * 50
+        content = b"This is a test resume with more than 100 words. " * 75  # Ensure >150 words
         text, metadata = self.extractor.extract(content, "txt")
         
         assert isinstance(text, str)
@@ -57,13 +57,13 @@ class TestTextExtractor:
     def test_extract_txt_encoding_detection(self):
         """Test TXT file with different encodings."""
         # Test with UTF-8
-        content = "Test resume content".encode('utf-8') * 10
-        text, metadata = self.extractor.extract(content, "txt")
+        content = "Test resume content with more words to meet minimum requirement. " * 15
+        text, metadata = self.extractor.extract(content.encode('utf-8'), "txt")
         assert metadata['encoding'] == 'utf-8'
         
         # Test with Latin-1
-        content = "Test resume content".encode('latin-1') * 10
-        text, metadata = self.extractor.extract(content, "txt")
+        content = "Test resume content with more words to meet minimum requirement. " * 15
+        text, metadata = self.extractor.extract(content.encode('latin-1'), "txt")
         assert metadata['encoding'] == 'latin-1'
     
     def test_clean_text(self):
@@ -84,7 +84,7 @@ class TestTextExtractor:
         mock_reader = Mock()
         mock_reader.is_encrypted = False
         mock_page = Mock()
-        mock_page.extract_text.return_value = "Test PDF content " * 20
+        mock_page.extract_text.return_value = "Test PDF content with more words to meet minimum requirement. " * 25
         mock_reader.pages = [mock_page]
         mock_pdf_reader.return_value = mock_reader
         
@@ -113,7 +113,7 @@ class TestTextExtractor:
         # Mock DOCX document
         mock_doc = Mock()
         mock_paragraph = Mock()
-        mock_paragraph.text = "Test DOCX content " * 20
+        mock_paragraph.text = "Test DOCX content with more words to meet minimum requirement. " * 25
         mock_doc.paragraphs = [mock_paragraph]
         mock_doc.tables = []
         mock_document.return_value = mock_doc

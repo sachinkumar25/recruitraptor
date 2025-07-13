@@ -83,7 +83,11 @@ class ResumeParser:
             'metadata': {
                 'total_words': len(doc),
                 'parsing_timestamp': datetime.now().isoformat(),
-                'confidence_overall': 0.0
+                'confidence_overall': 0.0,
+                'extraction_method': None,
+                'encoding': None,
+                'word_count': None,
+                'extraction_errors': []
             }
         }
         

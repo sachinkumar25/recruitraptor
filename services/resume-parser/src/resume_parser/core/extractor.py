@@ -147,7 +147,7 @@ class TextExtractor:
             
             return '\n'.join(text_parts)
             
-        except PyPDF2.PdfReadError as e:
+        except (PyPDF2.PdfReadError, PyPDF2.PdfError) as e:
             raise RuntimeError(f"Invalid or corrupted PDF file: {str(e)}")
         except Exception as e:
             raise RuntimeError(f"PDF extraction failed: {str(e)}")
