@@ -37,7 +37,24 @@ class ResumeParser:
         
         # URL patterns
         self.linkedin_pattern = re.compile(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[a-zA-Z0-9-]+/?', re.IGNORECASE)
-        self.github_pattern = re.compile(r'(?:https?://)?(?:www\.)?github\.com/[a-zA-Z0-9-]+/?', re.IGNORECASE)
+        
+        # Enhanced GitHub URL patterns
+        self.github_patterns = [
+            # Full URLs with protocol
+            re.compile(r'https?://(?:www\.)?github\.com/([a-zA-Z0-9-]+)(?:/[a-zA-Z0-9._-]+)?/?', re.IGNORECASE),
+            # URLs without protocol
+            re.compile(r'(?:www\.)?github\.com/([a-zA-Z0-9-]+)(?:/[a-zA-Z0-9._-]+)?/?', re.IGNORECASE),
+            # GitHub: username format
+            re.compile(r'github\s*:\s*([a-zA-Z0-9-]+)', re.IGNORECASE),
+            # GitHub profile: username format
+            re.compile(r'github\s+profile\s*:\s*([a-zA-Z0-9-]+)', re.IGNORECASE),
+            # @username format (common in resumes)
+            re.compile(r'@([a-zA-Z0-9-]+)', re.IGNORECASE),
+            # Username in parentheses or brackets
+            re.compile(r'[\(\[\{]([a-zA-Z0-9-]+)[\)\]\}]', re.IGNORECASE),
+            # Standalone username (with context)
+            re.compile(r'\b([a-zA-Z0-9-]{3,20})\b', re.IGNORECASE)
+        ]
         
         # Date patterns
         self.date_patterns = [
@@ -137,11 +154,16 @@ class ResumeParser:
             personal_info['linkedin_url']['value'] = linkedin_match.group()
             personal_info['linkedin_url']['confidence'] = 0.95
         
-        # Extract GitHub URL
-        github_match = self.github_pattern.search(text)
-        if github_match:
-            personal_info['github_url']['value'] = github_match.group()
-            personal_info['github_url']['confidence'] = 0.95
+        # Extract GitHub URLs using enhanced patterns
+        github_urls = self._extract_github_urls(text)
+        if github_urls:
+            # Use the highest confidence URL for the main github_url field
+            best_url = max(github_urls, key=lambda x: x['confidence'])
+            personal_info['github_url']['value'] = best_url['url']
+            personal_info['github_url']['confidence'] = best_url['confidence']
+            
+            # Store all discovered URLs in the github_urls list
+            personal_info['github_urls'] = github_urls
         
         # Extract name (first person entity)
         for ent in doc.ents:
@@ -334,6 +356,163 @@ class ResumeParser:
             skills['confidence'] = sum(confidences) / len(confidences)
         
         return skills
+    
+    def _extract_github_urls(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract GitHub URLs using multiple patterns with validation and confidence scoring.
+        
+        Args:
+            text: Resume text to search
+            
+        Returns:
+            List of dictionaries with 'url' and 'confidence' keys
+        """
+        extracted_urls = []
+        seen_usernames = set()
+        
+        # Context keywords that suggest GitHub references
+        github_context_keywords = [
+            'github', 'git', 'repository', 'repo', 'code', 'portfolio', 
+            'projects', 'open source', 'contributions', 'profile'
+        ]
+        
+        for i, pattern in enumerate(self.github_patterns):
+            matches = pattern.finditer(text)
+            
+            for match in matches:
+                username = match.group(1) if len(match.groups()) > 0 else match.group(0)
+                
+                # Skip if we've already seen this username
+                if username.lower() in seen_usernames:
+                    continue
+                
+                # Validate username format
+                if not self._is_valid_github_username(username):
+                    continue
+                
+                # Determine confidence based on pattern type and context
+                confidence = self._calculate_github_confidence(pattern, match, text, i)
+                
+                # Normalize URL format
+                normalized_url = self._normalize_github_url(username)
+                
+                extracted_urls.append({
+                    'url': normalized_url,
+                    'confidence': confidence,
+                    'username': username,
+                    'pattern_type': i
+                })
+                
+                seen_usernames.add(username.lower())
+        
+        # Sort by confidence (highest first)
+        extracted_urls.sort(key=lambda x: x['confidence'], reverse=True)
+        
+        self.logger.debug("Extracted GitHub URLs", 
+                         count=len(extracted_urls),
+                         urls=[url['url'] for url in extracted_urls])
+        
+        return extracted_urls
+    
+    def _is_valid_github_username(self, username: str) -> bool:
+        """
+        Validate GitHub username format.
+        
+        Args:
+            username: Username to validate
+            
+        Returns:
+            True if valid GitHub username format
+        """
+        if not username:
+            return False
+        
+        # GitHub username rules:
+        # - 1-39 characters
+        # - Only alphanumeric and hyphens
+        # - Cannot start or end with hyphen
+        # - Cannot have consecutive hyphens
+        if len(username) < 1 or len(username) > 39:
+            return False
+        
+        if not re.match(r'^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$', username):
+            return False
+        
+        if '--' in username:
+            return False
+        
+        return True
+    
+    def _calculate_github_confidence(self, pattern: re.Pattern, match: re.Match, text: str, pattern_index: int) -> float:
+        """
+        Calculate confidence score for extracted GitHub URL.
+        
+        Args:
+            pattern: Regex pattern that matched
+            match: Regex match object
+            text: Full text content
+            pattern_index: Index of pattern in self.github_patterns
+            
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        base_confidence = 0.0
+        
+        # Base confidence by pattern type (more specific patterns get higher confidence)
+        if pattern_index == 0:  # Full URLs with protocol
+            base_confidence = 0.95
+        elif pattern_index == 1:  # URLs without protocol
+            base_confidence = 0.90
+        elif pattern_index == 2:  # GitHub: username
+            base_confidence = 0.85
+        elif pattern_index == 3:  # GitHub profile: username
+            base_confidence = 0.90
+        elif pattern_index == 4:  # @username
+            base_confidence = 0.70
+        elif pattern_index == 5:  # Username in brackets
+            base_confidence = 0.60
+        elif pattern_index == 6:  # Standalone username
+            base_confidence = 0.30
+        
+        # Context bonus: check if GitHub-related keywords are nearby
+        context_bonus = 0.0
+        start_pos = max(0, match.start() - 50)
+        end_pos = min(len(text), match.end() + 50)
+        context_text = text[start_pos:end_pos].lower()
+        
+        github_keywords = ['github', 'git', 'repository', 'repo', 'code', 'portfolio']
+        for keyword in github_keywords:
+            if keyword in context_text:
+                context_bonus += 0.1
+        
+        # Cap context bonus at 0.2
+        context_bonus = min(context_bonus, 0.2)
+        
+        return min(base_confidence + context_bonus, 1.0)
+    
+    def _normalize_github_url(self, username: str) -> str:
+        """
+        Normalize GitHub URL to standard format.
+        
+        Args:
+            username: GitHub username
+            
+        Returns:
+            Normalized GitHub profile URL
+        """
+        # Remove any existing URL parts and normalize
+        username = username.strip()
+        
+        # If it's already a full URL, return as is
+        if username.startswith(('http://', 'https://')):
+            return username
+        
+        # If it starts with github.com, add protocol
+        if username.startswith('github.com/'):
+            return f'https://{username}'
+        
+        # If it's just a username, create full profile URL
+        return f'https://github.com/{username}'
     
     def get_confidence_score(self, extracted_data: Dict[str, Any]) -> float:
         """

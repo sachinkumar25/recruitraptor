@@ -14,7 +14,18 @@ class FileType(str, Enum):
 class ConfidenceField(BaseModel):
     """Model for fields with confidence scoring."""
     value: Optional[Any] = None
-    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0")
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0")
+
+class GitHubUrlInfo(BaseModel):
+    """Model for GitHub URL information with confidence scoring."""
+    url: str = Field(description="Normalized GitHub URL")
+    username: str = Field(description="GitHub username")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score for this URL")
+    pattern_type: int = Field(description="Type of pattern that matched (0-6)")
+    
+    class Config:
+        """Pydantic configuration."""
+        extra = "forbid"
 
 class PersonalInfo(BaseModel):
     """Personal information extracted from resume."""
@@ -24,6 +35,7 @@ class PersonalInfo(BaseModel):
     location: ConfidenceField = Field(default_factory=lambda: ConfidenceField())
     linkedin_url: ConfidenceField = Field(default_factory=lambda: ConfidenceField())
     github_url: ConfidenceField = Field(default_factory=lambda: ConfidenceField())
+    github_urls: List[GitHubUrlInfo] = Field(default_factory=list, description="All discovered GitHub URLs")
     confidence: float = Field(ge=0.0, le=1.0, description="Overall confidence for personal info section")
 
 class Education(BaseModel):
