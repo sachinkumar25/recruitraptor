@@ -1,0 +1,352 @@
+"""Main discovery service for orchestrating profile discovery."""
+
+import time
+import json
+from typing import Dict, List, Optional, Any
+import redis
+import httpx
+import structlog
+
+from ..core.config import settings
+from ..core.models import (
+    DiscoveryRequest, DiscoveryResponse, DiscoveryMetadata,
+    GitHubProfileMatch, LinkedInProfileMatch, DiscoveryStrategy,
+    ExtractedResumeData, DiscoveryOptions
+)
+from ..clients.github_client import GitHubClient
+from ..clients.search_client import SearchClient
+from ..utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class DiscoveryService:
+    """Main service for orchestrating profile discovery."""
+    
+    def __init__(self):
+        """Initialize discovery service."""
+        self.logger = logger
+        
+        # Initialize clients
+        self.github_client = GitHubClient()
+        self.search_client = SearchClient()
+        
+        # Initialize Redis for caching
+        self.redis_client = None
+        self._init_redis()
+        
+        # Initialize HTTP client for Resume Parser communication
+        self.http_client = httpx.AsyncClient(timeout=settings.request_timeout)
+    
+    def _init_redis(self) -> None:
+        """Initialize Redis connection for caching."""
+        try:
+            self.redis_client = redis.Redis(
+                host=settings.redis_host,
+                port=settings.redis_port,
+                db=settings.redis_db,
+                password=settings.redis_password,
+                decode_responses=True
+            )
+            # Test connection
+            self.redis_client.ping()
+            self.logger.info("Redis connection established")
+        except Exception as e:
+            self.logger.warning("Redis connection failed, caching disabled", error=str(e))
+            self.redis_client = None
+    
+    def _get_cache_key(self, candidate_data: ExtractedResumeData) -> str:
+        """Generate cache key for candidate data."""
+        # Use email and name for cache key
+        email = candidate_data.personal_info.email.value or ""
+        name = candidate_data.personal_info.name.value or ""
+        return f"discovery:{email}:{name}".lower().replace(" ", "_")
+    
+    def _get_cached_result(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get cached discovery result."""
+        if not self.redis_client:
+            return None
+        
+        try:
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            self.logger.warning("Failed to get cached result", error=str(e))
+        
+        return None
+    
+    def _cache_result(self, cache_key: str, result: Dict[str, Any]) -> None:
+        """Cache discovery result."""
+        if not self.redis_client:
+            return
+        
+        try:
+            self.redis_client.setex(
+                cache_key,
+                settings.redis_cache_ttl,
+                json.dumps(result)
+            )
+        except Exception as e:
+            self.logger.warning("Failed to cache result", error=str(e))
+    
+    async def discover_profiles(self, request: DiscoveryRequest) -> DiscoveryResponse:
+        """
+        Main method for discovering GitHub and LinkedIn profiles.
+        
+        Args:
+            request: Discovery request with candidate data
+            
+        Returns:
+            Discovery response with found profiles
+        """
+        start_time = time.time()
+        candidate_data = request.candidate_data
+        options = request.discovery_options or DiscoveryOptions()
+        
+        # Generate cache key
+        cache_key = self._get_cache_key(candidate_data)
+        
+        # Check cache first
+        cached_result = self._get_cached_result(cache_key)
+        if cached_result:
+            self.logger.info("Using cached discovery result", cache_key=cache_key)
+            return DiscoveryResponse(**cached_result)
+        
+        # Initialize metadata
+        metadata = DiscoveryMetadata(
+            total_processing_time_ms=0.0,
+            github_search_time_ms=0.0,
+            linkedin_search_time_ms=0.0,
+            strategies_used=[],
+            cache_hits=0,
+            api_calls_made=0,
+            errors_encountered=[]
+        )
+        
+        github_profiles = []
+        linkedin_profiles = []
+        
+        try:
+            # Extract candidate information
+            candidate_info = self._extract_candidate_info(candidate_data)
+            
+            # Discover GitHub profiles
+            if options.search_github:
+                github_start = time.time()
+                github_profiles = await self._discover_github_profiles(candidate_info, options)
+                metadata.github_search_time_ms = (time.time() - github_start) * 1000
+                metadata.strategies_used.extend([DiscoveryStrategy.EMAIL_BASED, DiscoveryStrategy.NAME_CONTEXT])
+            
+            # Discover LinkedIn profiles
+            if options.search_linkedin:
+                linkedin_start = time.time()
+                linkedin_profiles = await self._discover_linkedin_profiles(candidate_info, options)
+                metadata.linkedin_search_time_ms = (time.time() - linkedin_start) * 1000
+                metadata.strategies_used.append(DiscoveryStrategy.SEARCH_ENGINE)
+            
+            # Calculate total processing time
+            total_time = (time.time() - start_time) * 1000
+            metadata.total_processing_time_ms = total_time
+            
+            # Create response
+            response = DiscoveryResponse(
+                success=True,
+                github_profiles=github_profiles,
+                linkedin_profiles=linkedin_profiles,
+                discovery_metadata=metadata,
+                processing_time_ms=total_time
+            )
+            
+            # Cache the result
+            self._cache_result(cache_key, response.model_dump())
+            
+            self.logger.info("Profile discovery completed",
+                           github_count=len(github_profiles),
+                           linkedin_count=len(linkedin_profiles),
+                           processing_time_ms=total_time)
+            
+            return response
+            
+        except Exception as e:
+            self.logger.error("Profile discovery failed", error=str(e))
+            metadata.errors_encountered.append(str(e))
+            
+            return DiscoveryResponse(
+                success=False,
+                github_profiles=[],
+                linkedin_profiles=[],
+                discovery_metadata=metadata,
+                processing_time_ms=(time.time() - start_time) * 1000,
+                error_message=str(e)
+            )
+    
+    def _extract_candidate_info(self, candidate_data: ExtractedResumeData) -> Dict[str, Any]:
+        """Extract relevant information from candidate data."""
+        return {
+            'name': candidate_data.personal_info.name.value,
+            'email': candidate_data.personal_info.email.value,
+            'location': candidate_data.personal_info.location.value,
+            'github_url': candidate_data.personal_info.github_url.value,
+            'linkedin_url': candidate_data.personal_info.linkedin_url.value,
+            'companies': candidate_data.experience.get('companies', []),
+            'positions': candidate_data.experience.get('positions', []),
+            'skills': candidate_data.skills.get('technical_skills', [])
+        }
+    
+    async def _discover_github_profiles(self, candidate_info: Dict[str, Any], options: Any) -> List[GitHubProfileMatch]:
+        """Discover GitHub profiles using multiple strategies."""
+        github_profiles = []
+        seen_usernames = set()
+        
+        # Strategy 1: Email-based search
+        if candidate_info['email']:
+            email_results = self.github_client.search_users_by_email(candidate_info['email'])
+            for result in email_results:
+                username = result['username']
+                if username not in seen_usernames:
+                    profile = self.github_client.get_user_profile(username)
+                    if profile:
+                        confidence, reasoning = self.github_client.validate_profile_match(profile, candidate_info)
+                        if confidence >= options.min_confidence_score:
+                            # Get repositories and analysis
+                            repositories = []
+                            languages_used = {}
+                            frameworks_detected = []
+                            
+                            if options.include_repository_analysis:
+                                repositories = self.github_client.get_user_repositories(username)
+                                languages_used, frameworks_detected = self.github_client.analyze_languages_and_frameworks(repositories)
+                            
+                            match = GitHubProfileMatch(
+                                profile=profile,
+                                confidence=confidence,
+                                match_reasoning=reasoning,
+                                repositories=repositories,
+                                languages_used=languages_used,
+                                frameworks_detected=frameworks_detected,
+                                discovery_strategy=DiscoveryStrategy.EMAIL_BASED
+                            )
+                            github_profiles.append(match)
+                            seen_usernames.add(username)
+        
+        # Strategy 2: Name and context search
+        if candidate_info['name']:
+            name_results = self.github_client.search_users_by_name(
+                candidate_info['name'],
+                location=candidate_info['location'],
+                company=candidate_info['companies'][0] if candidate_info['companies'] else None
+            )
+            
+            for result in name_results:
+                username = result['username']
+                if username not in seen_usernames:
+                    profile = self.github_client.get_user_profile(username)
+                    if profile:
+                        confidence, reasoning = self.github_client.validate_profile_match(profile, candidate_info)
+                        if confidence >= options.min_confidence_score:
+                            # Get repositories and analysis
+                            repositories = []
+                            languages_used = {}
+                            frameworks_detected = []
+                            
+                            if options.include_repository_analysis:
+                                repositories = self.github_client.get_user_repositories(username)
+                                languages_used, frameworks_detected = self.github_client.analyze_languages_and_frameworks(repositories)
+                            
+                            match = GitHubProfileMatch(
+                                profile=profile,
+                                confidence=confidence,
+                                match_reasoning=reasoning,
+                                repositories=repositories,
+                                languages_used=languages_used,
+                                frameworks_detected=frameworks_detected,
+                                discovery_strategy=DiscoveryStrategy.NAME_CONTEXT
+                            )
+                            github_profiles.append(match)
+                            seen_usernames.add(username)
+        
+        # Sort by confidence and limit results
+        github_profiles.sort(key=lambda x: x.confidence, reverse=True)
+        return github_profiles[:options.max_github_results]
+    
+    async def _discover_linkedin_profiles(self, candidate_info: Dict[str, Any], options: Any) -> List[LinkedInProfileMatch]:
+        """Discover LinkedIn profiles using search engine."""
+        linkedin_profiles = []
+        
+        if not candidate_info['name']:
+            return linkedin_profiles
+        
+        # Search for LinkedIn profiles
+        search_results = self.search_client.search_linkedin_profiles(
+            name=candidate_info['name'],
+            location=candidate_info['location'],
+            company=candidate_info['companies'][0] if candidate_info['companies'] else None
+        )
+        
+        for result in search_results:
+            profile_url = result['profile_url']
+            
+            # Extract profile data
+            profile = self.search_client.extract_linkedin_profile_data(profile_url)
+            if profile:
+                confidence, reasoning = self.search_client.validate_linkedin_profile(profile, candidate_info)
+                if confidence >= options.min_confidence_score:
+                    match = LinkedInProfileMatch(
+                        profile=profile,
+                        confidence=confidence,
+                        match_reasoning=reasoning,
+                        discovery_strategy=DiscoveryStrategy.SEARCH_ENGINE
+                    )
+                    linkedin_profiles.append(match)
+        
+        # Sort by confidence and limit results
+        linkedin_profiles.sort(key=lambda x: x.confidence, reverse=True)
+        return linkedin_profiles[:options.max_linkedin_results]
+    
+    async def get_health_status(self) -> Dict[str, Any]:
+        """Get health status of external services."""
+        health_status = {
+            'github': 'unknown',
+            'linkedin': 'unknown',
+            'redis': 'unknown'
+        }
+        
+        # Check GitHub API
+        try:
+            rate_limit = self.github_client.get_rate_limit_status()
+            if rate_limit:
+                health_status['github'] = 'healthy'
+            else:
+                health_status['github'] = 'unhealthy'
+        except Exception as e:
+            health_status['github'] = 'error'
+            self.logger.error("GitHub health check failed", error=str(e))
+        
+        # Check LinkedIn search
+        try:
+            rate_limit = self.search_client.get_rate_limit_status()
+            if rate_limit['remaining'] > 0:
+                health_status['linkedin'] = 'healthy'
+            else:
+                health_status['linkedin'] = 'rate_limited'
+        except Exception as e:
+            health_status['linkedin'] = 'error'
+            self.logger.error("LinkedIn health check failed", error=str(e))
+        
+        # Check Redis
+        if self.redis_client:
+            try:
+                self.redis_client.ping()
+                health_status['redis'] = 'healthy'
+            except Exception as e:
+                health_status['redis'] = 'error'
+                self.logger.error("Redis health check failed", error=str(e))
+        else:
+            health_status['redis'] = 'not_configured'
+        
+        return health_status
+    
+    async def close(self) -> None:
+        """Close HTTP client connections."""
+        await self.http_client.aclose()
