@@ -147,10 +147,14 @@ class TextExtractor:
             
             return '\n'.join(text_parts)
             
-        except (PyPDF2.PdfReadError, PyPDF2.PdfError) as e:
-            raise RuntimeError(f"Invalid or corrupted PDF file: {str(e)}")
         except Exception as e:
-            raise RuntimeError(f"PDF extraction failed: {str(e)}")
+            error_msg = str(e).lower()
+            if "password" in error_msg or "encrypted" in error_msg:
+                raise RuntimeError("Password-protected PDFs are not supported")
+            elif "pdf" in error_msg and ("corrupt" in error_msg or "invalid" in error_msg):
+                raise RuntimeError(f"Invalid or corrupted PDF file: {str(e)}")
+            else:
+                raise RuntimeError(f"PDF extraction failed: {str(e)}")
     
     def _extract_docx(self, content: bytes) -> str:
         """
