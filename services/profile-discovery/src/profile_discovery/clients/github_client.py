@@ -62,20 +62,30 @@ class GitHubClient:
             users = self.github.search_users(query=query, sort='followers', order='desc')
             
             results = []
-            for user in users[:5]:  # Limit to top 5 results
-                results.append({
-                    'username': user.login,
-                    'name': user.name,
-                    'email': user.email,
-                    'bio': user.bio,
-                    'location': user.location,
-                    'company': user.company,
-                    'followers': user.followers,
-                    'public_repos': user.public_repos,
-                    'created_at': user.created_at.isoformat() if user.created_at else None,
-                    'avatar_url': user.avatar_url,
-                    'profile_url': user.html_url
-                })
+            # Safely iterate over users, handling empty results
+            try:
+                user_count = 0
+                for user in users:
+                    if user_count >= 5:  # Limit to top 5 results
+                        break
+                    results.append({
+                        'username': user.login,
+                        'name': user.name,
+                        'email': user.email,
+                        'bio': user.bio,
+                        'location': user.location,
+                        'company': user.company,
+                        'followers': user.followers,
+                        'public_repos': user.public_repos,
+                        'created_at': user.created_at.isoformat() if user.created_at else None,
+                        'avatar_url': user.avatar_url,
+                        'profile_url': user.html_url
+                    })
+                    user_count += 1
+            except IndexError:
+                # Handle case where no results are found
+                self.logger.info("No GitHub users found for email search", email=email)
+                pass
             
             self.logger.info("GitHub email search completed", 
                            email=email, 
@@ -114,20 +124,30 @@ class GitHubClient:
             users = self.github.search_users(query=query, sort='followers', order='desc')
             
             results = []
-            for user in users[:10]:  # Limit to top 10 results
-                results.append({
-                    'username': user.login,
-                    'name': user.name,
-                    'email': user.email,
-                    'bio': user.bio,
-                    'location': user.location,
-                    'company': user.company,
-                    'followers': user.followers,
-                    'public_repos': user.public_repos,
-                    'created_at': user.created_at.isoformat() if user.created_at else None,
-                    'avatar_url': user.avatar_url,
-                    'profile_url': user.html_url
-                })
+            # Safely iterate over users, handling empty results
+            try:
+                user_count = 0
+                for user in users:
+                    if user_count >= 10:  # Limit to top 10 results
+                        break
+                    results.append({
+                        'username': user.login,
+                        'name': user.name,
+                        'email': user.email,
+                        'bio': user.bio,
+                        'location': user.location,
+                        'company': user.company,
+                        'followers': user.followers,
+                        'public_repos': user.public_repos,
+                        'created_at': user.created_at.isoformat() if user.created_at else None,
+                        'avatar_url': user.avatar_url,
+                        'profile_url': user.html_url
+                    })
+                    user_count += 1
+            except IndexError:
+                # Handle case where no results are found
+                self.logger.info("No GitHub users found for name search", name=name)
+                pass
             
             self.logger.info("GitHub name search completed", 
                            name=name, 

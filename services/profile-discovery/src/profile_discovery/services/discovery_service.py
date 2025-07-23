@@ -179,8 +179,12 @@ class DiscoveryService:
             return response
             
         except Exception as e:
-            self.logger.error("Profile discovery failed", error=str(e))
-            metadata.errors_encountered.append(str(e))
+            import traceback
+            error_traceback = traceback.format_exc()
+            self.logger.error("Profile discovery failed", 
+                            error=str(e), 
+                            traceback=error_traceback)
+            metadata.errors_encountered.append(f"{str(e)}: {error_traceback}")
             
             return DiscoveryResponse(
                 success=False,
@@ -188,7 +192,7 @@ class DiscoveryService:
                 linkedin_profiles=[],
                 discovery_metadata=metadata,
                 processing_time_ms=(time.time() - start_time) * 1000,
-                error_message=str(e)
+                error_message=f"{str(e)}: {error_traceback}"
             )
     
     def _extract_candidate_info(self, candidate_data: ExtractedResumeData) -> Dict[str, Any]:
@@ -234,6 +238,10 @@ class DiscoveryService:
     
     async def _discover_github_profiles(self, candidate_info: Dict[str, Any], options: Any, candidate_data: ExtractedResumeData) -> List[GitHubProfileMatch]:
         """Discover GitHub profiles using multiple strategies."""
+        self.logger.info("Starting GitHub profile discovery", 
+                        candidate_info=candidate_info,
+                        options=options.model_dump() if hasattr(options, 'model_dump') else str(options))
+        
         github_profiles = []
         seen_usernames = set()
         
@@ -241,10 +249,26 @@ class DiscoveryService:
         if candidate_info['github_url']:
             self.logger.info("Checking provided GitHub URL", url=candidate_info['github_url'])
             username = self._extract_github_username(candidate_info['github_url'])
+            self.logger.info("Extracted GitHub username", username=username)
+            
             if username and username not in seen_usernames:
+                self.logger.info("Fetching GitHub profile", username=username)
                 profile = self.github_client.get_user_profile(username)
+                
                 if profile:
+                    self.logger.info("GitHub profile fetched successfully", 
+                                   username=username, 
+                                   name=profile.name,
+                                   company=profile.company,
+                                   location=profile.location)
+                    
                     confidence, reasoning = self.github_client.validate_profile_match(profile, candidate_data.model_dump())
+                    self.logger.info("GitHub profile validation completed", 
+                                   username=username,
+                                   confidence=confidence,
+                                   reasoning=reasoning,
+                                   min_confidence=options.min_confidence_score)
+                    
                     if confidence >= options.min_confidence_score:
                         # Get repositories and analysis
                         repositories = []
@@ -345,6 +369,10 @@ class DiscoveryService:
     
     async def _discover_linkedin_profiles(self, candidate_info: Dict[str, Any], options: Any, candidate_data: ExtractedResumeData) -> List[LinkedInProfileMatch]:
         """Discover LinkedIn profiles using multiple strategies."""
+        self.logger.info("Starting LinkedIn profile discovery", 
+                        candidate_info=candidate_info,
+                        options=options.model_dump() if hasattr(options, 'model_dump') else str(options))
+        
         linkedin_profiles = []
         
         # Strategy 0: Direct URL validation (highest priority)
