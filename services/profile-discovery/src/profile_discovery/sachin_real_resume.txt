@@ -1,0 +1,59 @@
+Sashvad (Sachin) Satishkumar
+571-236-6612 | sskumar@umd.edu | linkedin.com/in/sashvad-satishkumar | github.com/sachinkumar25
+
+EDUCATION
+University of Maryland (College Park) Expected Graduation Date: May 2026
+Bachelor of Science in Computer Science and Mathematics, Minor in Data Science College Park, MD
+• GPA: 3.83/4.0, Dean's List, President's Scholarship Recipient
+• Coursework: Computer Systems, Discrete Mathematics, Algorithms, Object-Oriented Programming I/II
+• Activities: AWS Club, Apex Fund, BigTh!nk AI, Bitcamp, Google Developer Student Club, XFoundry@UMD
+
+EXPERIENCE
+Capital One McLean, VA
+Incoming Machine Learning Intern Anticipated: Aug 2025 – Mar 2026
+• Designing and implementing ML workflows using Docker and Kubernetes orchestration, optimizing large-scale data
+processing with PyTorch and Hugging Face, and establishing MLOps practices for robust production deployment.
+
+Sentinel Capital Philadelphia, PA
+Quantitative Software Developer Mar 2024 – Present
+• Engineered an Expert Advisor (EA) in MQL4/MQL5, integrating the A-Gimat Reversal (AGR) indicator to
+enhance automated forex trading decisions, improving entry and exit timing, reducing execution latency by 35%.
+• Developed a Python-NinjaTrader pipeline using ZeroMQ, leveraging ML models/back end development and the
+Buy Sell Magic (BSM) indicator to confirm trend reversals, achieving a 30% increase in trade prediction accuracy.
+
+University of Maryland - Apex Fund College Park, MD
+Quantitative Software Engineering Intern Jan 2024 – Present
+• Pioneered an automated pipeline leveraging PyTorch and HuggingFace to harness NLP models (BERT, GPT-4,
+Llama 3) for extracting quantitative strategies from research papers, achieving a 92% relevance accuracy.
+• Streamlined the trading analysts' workflow by integrating Scikit-Learn pipelines, harnessing Python-based AI
+frameworks, and deploying a Flask-React front end for holistic data mining, reducing analysis time by 70%.
+
+George Mason University - Department of Geospatial Information Sciences Fairfax, VA
+Software Engineering Intern Mar 2022 – Nov 2023
+• Spearheaded advanced agent-based geospatial data workflows by building HPC-friendly Python frameworks using
+GeoPandas, Shapely, and PySAL, boosting operational efficiency by 25% and raising predictive accuracy by 30%.
+
+Dartmouth Health - Emerging Diagnostic and Investigative Technologies Hanover, NH
+Bioinformatics/Software Engineer Research Intern Mar 2021 – Aug 2022
+• Leveraged TensorFlow/PyTorch with ML pipelines on Amazon EC2 (P3 instances) and Amazon S3 to analyze 12+
+terabytes of TCGA data, establishing automated cancer detection systems that reduced processing time by 40%.
+
+PROJECTS/PUBLICATIONS
+EcoNavix: AI-Driven Sustainable Route Optimization Platform | Python, Docker, PostgreSQL
+• Reduced carbon emissions by up to 35% for supply chain logistics through real-time data integration from traffic,
+weather, and emissions APIs, including OpenRouteService, Carbon Interface, and OpenAI's GPT-4.
+• Built a full-stack solution with a Flask backend, React.js frontend, and PostgreSQL database, integrating multiple
+REST APIs for AI-driven route optimization, visualizing emissions reductions and itineraries on interactive map.
+
+ArcticAI: Development of MOHS 3D Laboratory Automation | Python, OpenMVG
+• Improved real-time surgical resection of tumor tissue, elevating SOC efficiency by 150% through HPC-based 3D
+reconstruction (OpenMVG, Neural Recon), image segmentation, and containerized web development (Docker).
+
+Human Mobility-Based Synthetic Social Network Generation | Python, Pandas, NetworkX
+• Engineered agent-based mobility simulations with evolving social networks using Dask/NetworkX, modeling human
+interactions and mobility patterns, increasing simulation accuracy by 60% with LLM-based generative analysis.
+
+SKILLS
+Languages: Python, Java, C++, JavaScript, HTML, CSS, SQL, C#, Go, PHP, NoSQL, Ruby
+Frameworks: React.js, Node.js, Express.js, Scikit-Learn, TensorFlow, Angular.js, PyTorch, Keras, Helm, Rails, Linux
+Developer Tools: AWS, Azure, Docker, Kubernetes, Apache, MongoDB, JIRA, Shadow, MySQL, CI/CD, Terraform
