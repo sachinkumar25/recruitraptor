@@ -1,0 +1,12 @@
+John Smith
+Software Engineer
+Email: john.smith@example.com
+GitHub: https://github.com/johnsmith
+Location: San Francisco, CA
+
+EXPERIENCE
+Google - Senior Engineer (2022-Present)
+Microsoft - Software Engineer (2020-2022)
+
+SKILLS
+Python, JavaScript, React, Django

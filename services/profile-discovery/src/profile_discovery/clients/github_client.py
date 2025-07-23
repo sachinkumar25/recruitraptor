@@ -7,9 +7,9 @@ from github.Repository import Repository
 from github.NamedUser import NamedUser
 import structlog
 
-from ..core.config import settings
-from ..core.models import GitHubProfile, GitHubRepository, DiscoveryStrategy
-from ..utils.logger import get_logger
+from profile_discovery.core.config import settings
+from profile_discovery.core.models import GitHubProfile, GitHubRepository, DiscoveryStrategy
+from profile_discovery.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

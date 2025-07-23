@@ -1,6 +1,6 @@
 """Configuration management for Profile Discovery Service."""
 
-from typing import Optional
+from typing import Optional, List
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -16,9 +16,13 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
     
+    # CORS Settings
+    allowed_origins: List[str] = Field(default=["*"], description="Allowed CORS origins")
+    
     # External API Keys
     github_token: Optional[str] = Field(default=None, description="GitHub API token")
     serpapi_key: Optional[str] = Field(default=None, description="SerpAPI key")
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     
     # Redis Configuration
     redis_host: str = Field(default="localhost", description="Redis host")
@@ -26,6 +30,8 @@ class Settings(BaseSettings):
     redis_db: int = Field(default=1, description="Redis database")
     redis_password: Optional[str] = Field(default=None, description="Redis password")
     redis_cache_ttl: int = Field(default=86400, description="Cache TTL in seconds (24h)")
+    redis_url: Optional[str] = Field(default=None, description="Redis connection URL")
+    profile_cache_ttl: int = Field(default=3600, description="Profile cache TTL in seconds (1h)")
     
     # Resume Parser Service
     resume_parser_url: str = Field(default="http://localhost:8000", description="Resume Parser service URL")
@@ -50,6 +56,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "allow"  # Allow extra fields from .env file
 
 
 # Global settings instance

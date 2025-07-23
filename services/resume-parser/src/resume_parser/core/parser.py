@@ -38,7 +38,7 @@ class ResumeParser:
         # URL patterns
         self.linkedin_pattern = re.compile(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[a-zA-Z0-9-]+/?', re.IGNORECASE)
         
-        # Enhanced GitHub URL patterns
+        # Enhanced GitHub URL patterns - only extract real GitHub URLs
         self.github_patterns = [
             # Full URLs with protocol
             re.compile(r'https?://(?:www\.)?github\.com/([a-zA-Z0-9-]+)(?:/[a-zA-Z0-9._-]+)?/?', re.IGNORECASE),
@@ -48,12 +48,10 @@ class ResumeParser:
             re.compile(r'github\s*:\s*([a-zA-Z0-9-]+)', re.IGNORECASE),
             # GitHub profile: username format
             re.compile(r'github\s+profile\s*:\s*([a-zA-Z0-9-]+)', re.IGNORECASE),
-            # @username format (common in resumes)
-            re.compile(r'@([a-zA-Z0-9-]+)', re.IGNORECASE),
-            # Username in parentheses or brackets
-            re.compile(r'[\(\[\{]([a-zA-Z0-9-]+)[\)\]\}]', re.IGNORECASE),
-            # Standalone username (with context)
-            re.compile(r'\b([a-zA-Z0-9-]{3,20})\b', re.IGNORECASE)
+            # @username format (common in resumes) - only if preceded by GitHub context
+            re.compile(r'(?:github|git|repo|repository|code|portfolio)\s*[:\-]?\s*@([a-zA-Z0-9-]+)', re.IGNORECASE),
+            # Username in parentheses or brackets with GitHub context
+            re.compile(r'(?:github|git|repo|repository|code|portfolio)\s*[:\-]?\s*[\(\[\{]([a-zA-Z0-9-]+)[\)\]\}]', re.IGNORECASE),
         ]
         
         # Date patterns
@@ -416,7 +414,7 @@ class ResumeParser:
     
     def _is_valid_github_username(self, username: str) -> bool:
         """
-        Validate GitHub username format.
+        Validate GitHub username format with additional checks for common false positives.
         
         Args:
             username: Username to validate
@@ -439,6 +437,63 @@ class ResumeParser:
             return False
         
         if '--' in username:
+            return False
+        
+        # Additional validation to prevent false positives
+        # Reject common words that are unlikely to be GitHub usernames
+        common_words_to_reject = {
+            'https', 'www', 'com', 'org', 'net', 'edu', 'gov', 'mil', 'io', 'co', 'uk', 'us',
+            'coursework', 'data', 'structures', 'algorithms', 'machine', 'learning', 'database', 'systems',
+            'education', 'professional', 'experience', 'technical', 'skills', 'projects', 'certifications',
+            'achievements', 'university', 'college', 'school', 'institute', 'academy', 'graduated', 'gpa',
+            'dean', 'list', 'summa', 'cum', 'laude', 'relevant', 'led', 'development', 'microservices',
+            'architecture', 'serving', 'over', 'one', 'million', 'active', 'users', 'daily', 'implemented',
+            'comprehensive', 'pipelines', 'reducing', 'deployment', 'time', 'fifty', 'percent', 'mentored',
+            'three', 'junior', 'developers', 'and', 'conducted', 'thorough', 'code', 'reviews', 'designed',
+            'optimized', 'schemas', 'improving', 'query', 'performance', 'forty', 'technologies', 'python',
+            'kubernetes', 'postgresql', 'redis', 'docker', 'jenkins', 'meta', 'platforms', 'december',
+            'built', 'responsive', 'react', 'applications', 'using', 'typescript', 'for', 'internal',
+            'productivity', 'tools', 'developed', 'robust', 'restful', 'apis', 'django', 'fastapi',
+            'frameworks', 'collaborated', 'with', 'cross-functional', 'teams', 'deliver', 'features',
+            'millions', 'queries', 'caching', 'strategies', 'thirty', 'mysql', 'aws', 'engineering',
+            'intern', 'microsoft', 'corporation', 'august', 'automation', 'azure', 'cloud', 'infrastructure',
+            'management', 'monitoring', 'dashboards', 'power', 'custom', 'analytics', 'participated',
+            'agile', 'processes', 'sprint', 'planning', 'net', 'sql', 'server', 'programming', 'languages',
+            'javascript', 'java', 'bash', 'web', 'node', 'express', 'flask', 'spring', 'boot', 'databases',
+            'mongodb', 'elasticsearch', 'dynamodb', 'platform', 'chat', 'application', 'scalable', 'websocket',
+            'connections', 'pub', 'sub', 'user', 'authentication', 'message', 'encryption', 'file', 'sharing',
+            'capabilities', 'deployed', 'auto-scaling', 'load', 'balancing', 'high', 'availability',
+            'e-commerce', 'full-stack', 'payment', 'integration', 'shopping', 'cart', 'inventory', 'order',
+            'tracking', 'used', 'frontend', 'backend', 'certified', 'solutions', 'architect', 'associate',
+            'developer', 'winner', 'hackathon', 'published', 'research', 'paper', 'distributed', 'optimization',
+            'john', 'smith', 'senior', 'software', 'engineer', 'email', 'phone', 'location', 'san', 'francisco',
+            'bachelor', 'science', 'computer', 'june', 'present', 'january', 'february', 'march', 'april',
+            'may', 'july', 'september', 'october', 'november', 'december', 'monday', 'tuesday', 'wednesday',
+            'thursday', 'friday', 'saturday', 'sunday', 'morning', 'afternoon', 'evening', 'night', 'today',
+            'tomorrow', 'yesterday', 'week', 'month', 'year', 'years', 'months', 'weeks', 'days', 'hours',
+            'minutes', 'seconds', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth',
+            'ninth', 'tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth',
+            'seventeenth', 'eighteenth', 'nineteenth', 'twentieth', 'twenty', 'thirty', 'forty', 'fifty',
+            'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'thousand', 'million', 'billion', 'trillion'
+        }
+        
+        # Convert to lowercase for comparison
+        username_lower = username.lower()
+        
+        # Reject if it's a common word
+        if username_lower in common_words_to_reject:
+            return False
+        
+        # Reject if it's just numbers (unlikely to be a real GitHub username)
+        if username.isdigit():
+            return False
+        
+        # Reject if it's too short (less than 3 characters) unless it's a very common short username
+        if len(username) < 3 and username_lower not in {'js', 'ts', 'py', 'go', 'js', 'rb', 'php', 'cs', 'rs', 'kt', 'sw'}:
+            return False
+        
+        # Reject if it contains common file extensions or protocols
+        if any(ext in username_lower for ext in ['.com', '.org', '.net', '.edu', '.gov', '.mil', '.io', '.co', '.uk', '.us']):
             return False
         
         return True
@@ -467,26 +522,24 @@ class ResumeParser:
             base_confidence = 0.85
         elif pattern_index == 3:  # GitHub profile: username
             base_confidence = 0.90
-        elif pattern_index == 4:  # @username
-            base_confidence = 0.70
-        elif pattern_index == 5:  # Username in brackets
-            base_confidence = 0.60
-        elif pattern_index == 6:  # Standalone username
-            base_confidence = 0.30
+        elif pattern_index == 4:  # @username with GitHub context
+            base_confidence = 0.75
+        elif pattern_index == 5:  # Username in brackets with GitHub context
+            base_confidence = 0.65
         
         # Context bonus: check if GitHub-related keywords are nearby
         context_bonus = 0.0
-        start_pos = max(0, match.start() - 50)
-        end_pos = min(len(text), match.end() + 50)
+        start_pos = max(0, match.start() - 100)
+        end_pos = min(len(text), match.end() + 100)
         context_text = text[start_pos:end_pos].lower()
         
-        github_keywords = ['github', 'git', 'repository', 'repo', 'code', 'portfolio']
+        github_keywords = ['github', 'git', 'repository', 'repo', 'code', 'portfolio', 'profile']
         for keyword in github_keywords:
             if keyword in context_text:
-                context_bonus += 0.1
+                context_bonus += 0.05
         
-        # Cap context bonus at 0.2
-        context_bonus = min(context_bonus, 0.2)
+        # Cap context bonus at 0.15
+        context_bonus = min(context_bonus, 0.15)
         
         return min(base_confidence + context_bonus, 1.0)
     

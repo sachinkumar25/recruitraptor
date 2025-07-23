@@ -1,0 +1,25 @@
+
+John Smith
+Senior Software Engineer
+Email: john.smith@gmail.com
+Phone: (555) 123-4567
+Location: San Francisco, CA
+LinkedIn: https://linkedin.com/in/johnsmith
+GitHub: https://github.com/johnsmith
+
+EDUCATION
+Stanford University
+Bachelor of Science in Computer Science
+Graduated: June 2020
+
+EXPERIENCE
+Senior Software Engineer | Google | 2022-Present
+- Led microservices development with Python and Kubernetes
+- Built scalable systems serving 1M+ users
+
+Software Engineer | GitHub | 2020-2022
+- Developed React applications and REST APIs
+- Technologies: Python, JavaScript, React, Django
+
+SKILLS
+Python, JavaScript, React, Django, Kubernetes, AWS, PostgreSQL
