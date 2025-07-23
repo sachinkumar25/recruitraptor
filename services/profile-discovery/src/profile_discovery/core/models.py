@@ -14,6 +14,7 @@ class PlatformType(str, Enum):
 
 class DiscoveryStrategy(str, Enum):
     """Discovery strategies."""
+    DIRECT_URL = "direct_url"
     EMAIL_BASED = "email_based"
     NAME_CONTEXT = "name_context"
     FUZZY_MATCHING = "fuzzy_matching"

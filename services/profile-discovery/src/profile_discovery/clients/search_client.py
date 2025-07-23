@@ -219,22 +219,26 @@ class SearchClient:
         
         # Current position matching
         if profile.current_position and candidate_data.get('experience', {}).get('positions'):
-            candidate_positions = [p.lower() for p in candidate_data['experience']['positions']]
-            profile_position = profile.current_position.lower()
-            
-            if any(position in profile_position or profile_position in position for position in candidate_positions):
-                confidence += 0.3
-                reasoning_parts.append("Position matches")
+            positions = candidate_data['experience']['positions']
+            if positions and isinstance(positions, list) and len(positions) > 0:
+                candidate_positions = [p.lower() for p in positions]
+                profile_position = profile.current_position.lower()
+                
+                if any(position in profile_position or profile_position in position for position in candidate_positions):
+                    confidence += 0.3
+                    reasoning_parts.append("Position matches")
         
         # Headline relevance
         if profile.headline and candidate_data.get('skills', {}).get('technical_skills'):
-            candidate_skills = [s.lower() for s in candidate_data['skills']['technical_skills']]
-            profile_headline = profile.headline.lower()
-            
-            skill_matches = sum(1 for skill in candidate_skills if skill in profile_headline)
-            if skill_matches > 0:
-                confidence += min(0.2, skill_matches * 0.1)
-                reasoning_parts.append(f"{skill_matches} skill matches in headline")
+            skills = candidate_data['skills']['technical_skills']
+            if skills and isinstance(skills, list) and len(skills) > 0:
+                candidate_skills = [s.lower() for s in skills]
+                profile_headline = profile.headline.lower()
+                
+                skill_matches = sum(1 for skill in candidate_skills if skill in profile_headline)
+                if skill_matches > 0:
+                    confidence += min(0.2, skill_matches * 0.1)
+                    reasoning_parts.append(f"{skill_matches} skill matches in headline")
         
         # Cap confidence at 1.0
         confidence = min(confidence, 1.0)

@@ -333,12 +333,14 @@ class GitHubClient:
         
         # Company matching
         if profile.company and candidate_data.get('experience', {}).get('companies'):
-            candidate_companies = [c.lower() for c in candidate_data['experience']['companies']]
-            profile_company = profile.company.lower()
-            
-            if any(company in profile_company or profile_company in company for company in candidate_companies):
-                confidence += 0.2
-                reasoning_parts.append("Company matches")
+            companies = candidate_data['experience']['companies']
+            if companies and isinstance(companies, list) and len(companies) > 0:
+                candidate_companies = [c.lower() for c in companies]
+                profile_company = profile.company.lower()
+                
+                if any(company in profile_company or profile_company in company for company in candidate_companies):
+                    confidence += 0.2
+                    reasoning_parts.append("Company matches")
         
         # Activity level bonus
         if profile.public_repos > 5:

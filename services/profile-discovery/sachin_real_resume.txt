@@ -1,230 +1,59 @@
-""" Real-World Test: Sachin's Resume → Profile Discovery
-Tests the complete AI Recruiter Agent pipeline with actual resume and profiles. """
+Sashvad (Sachin) Satishkumar
+571-236-6612 | sskumar@umd.edu | linkedin.com/in/sashvad-satishkumar | github.com/sachinkumar25
 
-import requests
-import json
-import time
-from datetime import datetime
+EDUCATION
+University of Maryland (College Park) Expected Graduation Date: May 2026
+Bachelor of Science in Computer Science and Mathematics, Minor in Data Science College Park, MD
+- GPA: 3.83/4.0, Dean's List, President's Scholarship Recipient
+- Coursework: Computer Systems, Discrete Mathematics, Algorithms, Object-Oriented Programming I/II
+- Activities: AWS Club, Apex Fund, BigTh!nk AI, Bitcamp, Google Developer Student Club, XFoundry@UMD
 
-def test_sachin_profile_discovery():
-    print("🧪 REAL-WORLD TEST: Sachin's Resume → Profile Discovery Pipeline")
-    print("=" * 70)
-    print(f"⏰ Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+EXPERIENCE
+Capital One McLean, VA
+Incoming Machine Learning Intern Anticipated: Aug 2025 – Mar 2026
+- Designing and implementing ML workflows using Docker and Kubernetes orchestration, optimizing large-scale data
+processing with PyTorch and Hugging Face, and establishing MLOps practices for robust production deployment.
 
-    # Expected results for validation
-    EXPECTED_RESULTS = {
-        'name': 'Sashvad (Sachin) Satishkumar',
-        'email': 'sskumar@umd.edu',
-        'github': 'github.com/sachinkumar25',
-        'linkedin': 'linkedin.com/in/sashvad-satishkumar',
-        'phone': '571-236-6612'
-    }
+Sentinel Capital Philadelphia, PA
+Quantitative Software Developer Mar 2024 – Present
+- Engineered an Expert Advisor (EA) in MQL4/MQL5, integrating the A-Gimat Reversal (AGR) indicator to
+enhance automated forex trading decisions, improving entry and exit timing, reducing execution latency by 35%.
+- Developed a Python-NinjaTrader pipeline using ZeroMQ, leveraging ML models/back end development and the
+Buy Sell Magic (BSM) indicator to confirm trend reversals, achieving a 30% increase in trade prediction accuracy.
 
-    try:
-        # Step 1: Upload Sachin's real resume
-        print("📄 STEP 1: Processing Sachin's actual resume...")
-        with open('sachin_real_resume.txt', 'rb') as f:
-            start_time = time.time()
-            response = requests.post(
-                'http://localhost:8000/api/v1/upload',
-                files={'file': f},
-                timeout=30
-            )
-            parse_time = time.time() - start_time
+University of Maryland - Apex Fund College Park, MD
+Quantitative Software Engineering Intern Jan 2024 – Present
+- Pioneered an automated pipeline leveraging PyTorch and HuggingFace to harness NLP models (BERT, GPT-4,
+Llama 3) for extracting quantitative strategies from research papers, achieving a 92% relevance accuracy.
+- Streamlined the trading analysts' workflow by integrating Scikit-Learn pipelines, harnessing Python-based AI
+frameworks, and deploying a Flask-React front end for holistic data mining, reducing analysis time by 70%.
 
-        if response.status_code == 200:
-            parsed_data = response.json()
-            print(f"✅ Resume parsing successful! ({parse_time:.2f}s)")
+George Mason University - Department of Geospatial Information Sciences Fairfax, VA
+Software Engineering Intern Mar 2022 – Nov 2023
+- Spearheaded advanced agent-based geospatial data workflows by building HPC-friendly Python frameworks using
+GeoPandas, Shapely, and PySAL, boosting operational efficiency by 25% and raising predictive accuracy by 30%.
 
-            # Extract and validate personal info
-            personal_info = parsed_data['parsed_data']['personal_info']
-            print("\n📊 EXTRACTED PERSONAL INFORMATION:")
-            print(f"   👤 Name: {personal_info.get('name', {}).get('value', 'Not found')}")
-            print(f"      Expected: {EXPECTED_RESULTS['name']}")
-            print(f"      Match: {'✅' if EXPECTED_RESULTS['name'].lower() in personal_info.get('name', {}).get('value', '').lower() else '❌'}")
+Dartmouth Health - Emerging Diagnostic and Investigative Technologies Hanover, NH
+Bioinformatics/Software Engineer Research Intern Mar 2021 – Aug 2022
+- Leveraged TensorFlow/PyTorch with ML pipelines on Amazon EC2 (P3 instances) and Amazon S3 to analyze 12+
+terabytes of TCGA data, establishing automated cancer detection systems that reduced processing time by 40%.
 
-            print(f"   📧 Email: {personal_info.get('email', {}).get('value', 'Not found')}")
-            print(f"      Expected: {EXPECTED_RESULTS['email']}")
-            print(f"      Match: {'✅' if EXPECTED_RESULTS['email'] in personal_info.get('email', {}).get('value', '') else '❌'}")
+PROJECTS/PUBLICATIONS
+EcoNavix: AI-Driven Sustainable Route Optimization Platform | Python, Docker, PostgreSQL
+- Reduced carbon emissions by up to 35% for supply chain logistics through real-time data integration from traffic,
+weather, and emissions APIs, including OpenRouteService, Carbon Interface, and OpenAI's GPT-4.
+- Built a full-stack solution with a Flask backend, React.js frontend, and PostgreSQL database, integrating multiple
+REST APIs for AI-driven route optimization, visualizing emissions reductions and itineraries on interactive map.
 
-            print(f"   📱 Phone: {personal_info.get('phone', {}).get('value', 'Not found')}")
-            print(f"      Expected: {EXPECTED_RESULTS['phone']}")
-            print(f"      Match: {'✅' if EXPECTED_RESULTS['phone'] in personal_info.get('phone', {}).get('value', '') else '❌'}")
+ArcticAI: Development of MOHS 3D Laboratory Automation | Python, OpenMVG
+- Improved real-time surgical resection of tumor tissue, elevating SOC efficiency by 150% through HPC-based 3D
+reconstruction (OpenMVG, Neural Recon), image segmentation, and containerized web development (Docker).
 
-            print(f"   🐙 GitHub: {personal_info.get('github_url', {}).get('value', 'Not found')}")
-            print(f"      Expected: {EXPECTED_RESULTS['github']}")
-            print(f"      Match: {'✅' if 'sachinkumar25' in personal_info.get('github_url', {}).get('value', '') else '❌'}")
+Human Mobility-Based Synthetic Social Network Generation | Python, Pandas, NetworkX
+- Engineered agent-based mobility simulations with evolving social networks using Dask/NetworkX, modeling human
+interactions and mobility patterns, increasing simulation accuracy by 60% with LLM-based generative analysis.
 
-            print(f"   💼 LinkedIn: {personal_info.get('linkedin_url', {}).get('value', 'Not found')}")
-            print(f"      Expected: {EXPECTED_RESULTS['linkedin']}")
-            print(f"      Match: {'✅' if 'sashvad-satishkumar' in personal_info.get('linkedin_url', {}).get('value', '') else '❌'}")
-
-            # Show education and experience
-            education = parsed_data['parsed_data']['education']
-            experience = parsed_data['parsed_data']['experience']
-            skills = parsed_data['parsed_data']['skills']
-
-            print("\n📚 EDUCATION:")
-            inst = education.get('institutions', ['Not found'])
-            print(f"   🏫 Institution: {inst[0]}")
-            print(f"   🎓 GPA: {education.get('gpa', {}).get('value', 'Not found')}")
-
-            print("\n💼 EXPERIENCE:")
-            companies = experience.get('companies', [])[:3]
-            print(f"   🏢 Companies: {', '.join(companies) if companies else 'Not found'}")
-
-            print("\n💻 TECHNICAL SKILLS:")
-            tech_skills = skills.get('technical_skills', [])[:10]
-            print(f"   🛠️  Top Skills: {', '.join(tech_skills) if tech_skills else 'Not found'}")
-
-            # Step 2: Profile Discovery
-            print("\n🔍 STEP 2: Discovering Sachin's real profiles...")
-            discovery_request = {
-                "candidate_data": parsed_data["parsed_data"],
-                "discovery_options": {
-                    "platforms": ["github", "linkedin"],
-                    "max_results_per_platform": 5,
-                    "strategies": ["email", "name_context", "fuzzy_match"]
-                }
-            }
-            start_time = time.time()
-            response = requests.post(
-                'http://localhost:8001/api/v1/discover',
-                json=discovery_request,
-                timeout=60
-            )
-            discovery_time = time.time() - start_time
-
-            if response.status_code == 200:
-                discovery_data = response.json()
-                print(f"✅ Profile discovery completed! ({discovery_time:.2f}s)")
-
-                # Analyze GitHub Results
-                github_profiles = discovery_data.get('github_profiles', [])
-                print(f"\n🐙 GITHUB PROFILES DISCOVERED: {len(github_profiles)}")
-                sachin_github_found = False
-
-                for i, profile in enumerate(github_profiles[:5]):
-                    username = profile.get('username', 'N/A')
-                    url = profile.get('profile_url', 'N/A')
-                    confidence = profile.get('confidence_score', 0)
-                    reason = profile.get('match_reasoning', 'N/A')
-                    is_sachin = 'sachinkumar25' in username.lower()
-                    if is_sachin:
-                        sachin_github_found = True
-                    print(f"   {i+1}. {'🎯' if is_sachin else '📍'} Username: {username}")
-                    print(f"      URL: {url}")
-                    print(f"      Confidence: {confidence:.3f}")
-                    print(f"      Match reason: {reason}")
-
-                    # Repository analysis
-                    repo_data = profile.get('repository_analysis', {})
-                    total_repos = repo_data.get('total_repos', 0)
-                    print(f"      📊 Total repositories: {total_repos}")
-                    if repo_data.get('languages'):
-                        langs = repo_data['languages']
-                        top_3 = sorted(langs.items(), key=lambda x: x[1], reverse=True)[:3]
-                        lang_str = ", ".join(f"{lang}({pct:.1f}%)" for lang, pct in top_3)
-                        print(f"      💻 Top languages: {lang_str}")
-                    if repo_data.get('frameworks'):
-                        print(f"      🔧 Frameworks: {', '.join(repo_data['frameworks'][:5])}")
-                    print()
-
-                # Analyze LinkedIn Results
-                linkedin_profiles = discovery_data.get('linkedin_profiles', [])
-                print(f"💼 LINKEDIN PROFILES DISCOVERED: {len(linkedin_profiles)}")
-                sachin_linkedin_found = False
-
-                for i, profile in enumerate(linkedin_profiles[:5]):
-                    url = profile.get('profile_url', 'N/A')
-                    confidence = profile.get('confidence_score', 0)
-                    reason = profile.get('match_reasoning', 'N/A')
-                    is_sachin = 'sashvad' in url.lower() or 'satishkumar' in url.lower()
-                    if is_sachin:
-                        sachin_linkedin_found = True
-                    print(f"   {i+1}. {'🎯' if is_sachin else '📍'} URL: {url}")
-                    print(f"      Confidence: {confidence:.3f}")
-                    print(f"      Match reason: {reason}")
-                    if profile.get('profile_data'):
-                        data = profile['profile_data']
-                        print(f"      👤 Name: {data.get('name', 'N/A')}")
-                        print(f"      💼 Headline: {data.get('headline', 'N/A')}")
-                        print(f"      📍 Location: {data.get('location', 'N/A')}")
-                    print()
-
-                # Final Validation Summary
-                print("🏆 FINAL VALIDATION RESULTS:")
-                name_ok = 'sachin' in personal_info.get('name', {}).get('value', '').lower()
-                email_ok = 'sskumar@umd.edu' in personal_info.get('email', {}).get('value', '')
-                print(f"   👤 Name extraction: {'✅' if name_ok else '❌'}")
-                print(f"   📧 Email extraction: {'✅' if email_ok else '❌'}")
-                print(f"   🐙 GitHub discovery: {'✅' if sachin_github_found else '❌'}")
-                print(f"   💼 LinkedIn discovery: {'✅' if sachin_linkedin_found else '❌'}")
-
-                success_rate = (sum([name_ok, email_ok, sachin_github_found, sachin_linkedin_found]) / 4) * 100
-                print(f"   📊 Overall success rate: {success_rate:.1f}%")
-
-                # Performance metrics
-                total_time = parse_time + discovery_time
-                print("\n⚡ PERFORMANCE METRICS:")
-                print(f"   📄 Resume parsing time: {parse_time:.2f}s")
-                print(f"   🔍 Profile discovery time: {discovery_time:.2f}s")
-                print(f"   🎯 Total pipeline time: {total_time:.2f}s (Target <45s: {'✅' if total_time < 45 else '❌'})")
-
-                # Save comprehensive results
-                results = {
-                    'test_timestamp': datetime.now().isoformat(),
-                    'expected_results': EXPECTED_RESULTS,
-                    'parsed_resume': parsed_data,
-                    'discovery_results': discovery_data,
-                    'validation': {
-                        'name_extracted': name_ok,
-                        'email_extracted': email_ok,
-                        'github_found': sachin_github_found,
-                        'linkedin_found': sachin_linkedin_found,
-                        'success_rate': success_rate
-                    },
-                    'performance': {
-                        'parse_time_seconds': parse_time,
-                        'discovery_time_seconds': discovery_time,
-                        'total_time_seconds': total_time
-                    }
-                }
-                with open('sachin_profile_discovery_results.json', 'w') as f:
-                    json.dump(results, f, indent=2)
-
-                print("\n💾 Complete results saved to 'sachin_profile_discovery_results.json'")
-
-                # Final verdict
-                if success_rate >= 75 and total_time < 45:
-                    print("\n🎉 TEST VERDICT: SUCCESS! ✅")
-                    print("   The AI Recruiter Agent successfully processed Sachin's resume and found his profiles!")
-                elif success_rate >= 50:
-                    print("\n⚠️  TEST VERDICT: PARTIAL SUCCESS ⚠️")
-                    print("   The system works but needs optimization for better accuracy.")
-                else:
-                    print("\n❌ TEST VERDICT: NEEDS IMPROVEMENT ❌")
-                    print("   The system requires debugging and optimization.")
-            else:
-                print(f"❌ Profile discovery failed: {response.status_code}")
-                print(f"   Error details: {response.text}")
-        else:
-            print(f"❌ Resume parsing failed: {response.status_code}")
-            print(f"   Error details: {response.text}")
-
-    except requests.exceptions.ConnectionError as e:
-        if "8000" in str(e):
-            print("❌ Resume Parser service not running on port 8000")
-            print("   Start it with: cd services/resume-parser && poetry run python -m src.resume_parser.main")
-        elif "8001" in str(e):
-            print("❌ Profile Discovery service not running on port 8001")
-            print("   Start it with: cd services/profile-discovery && PYTHONPATH=src poetry run python -m profile_discovery.main")
-        else:
-            print(f"❌ Connection error: {e}")
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        import traceback
-        print(f"   Traceback: {traceback.format_exc()}")
-
-if __name__ == "__main__":
-    test_sachin_profile_discovery()
+SKILLS
+Languages: Python, Java, C++, JavaScript, HTML, CSS, SQL, C#, Go, PHP, NoSQL, Ruby
+Frameworks: React.js, Node.js, Express.js, Scikit-Learn, TensorFlow, Angular.js, PyTorch, Keras, Helm, Rails, Linux
+Developer Tools: AWS, Azure, Docker, Kubernetes, Apache, MongoDB, JIRA, Shadow, MySQL, CI/CD, Terraform
