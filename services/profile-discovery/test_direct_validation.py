@@ -8,7 +8,7 @@ sys.path.append('src')
 from profile_discovery.services.discovery_service import DiscoveryService
 from profile_discovery.core.models import ExtractedResumeData, PersonalInfo, ConfidenceField, DiscoveryRequest, DiscoveryOptions
 
-def test_direct_github_validation():
+async def test_direct_github_validation():
     """Test direct GitHub URL validation."""
     print("🔍 TESTING DIRECT GITHUB URL VALIDATION")
     print("=" * 50)
@@ -71,7 +71,7 @@ def test_direct_github_validation():
         
         # Test direct GitHub profile discovery
         print(f"\n🔍 TESTING DIRECT GITHUB PROFILE DISCOVERY:")
-        github_profiles = service._discover_github_profiles(candidate_info, request.discovery_options, candidate_data)
+        github_profiles = await service._discover_github_profiles(candidate_info, request.discovery_options, candidate_data)
         
         print(f"✅ GitHub profiles found: {len(github_profiles)}")
         
@@ -100,4 +100,5 @@ def test_direct_github_validation():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    test_direct_github_validation() 
+    import asyncio
+    asyncio.run(test_direct_github_validation()) 
