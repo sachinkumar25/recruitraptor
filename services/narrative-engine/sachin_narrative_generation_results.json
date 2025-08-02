@@ -1,0 +1,206 @@
+{
+  "test_timestamp": "2025-08-02T14:14:12.027076",
+  "candidate_profile": {
+    "candidate_id": "sachin-kumar-2024",
+    "name": "Sashvad (Sachin) Satishkumar",
+    "email": "sskumar@umd.edu",
+    "location": "College Park, MD",
+    "github_url": "https://github.com/sachinkumar25",
+    "technical_skills": [
+      {
+        "skill": "Python",
+        "confidence": 0.95,
+        "evidence": [
+          "resume",
+          "github"
+        ]
+      },
+      {
+        "skill": "JavaScript",
+        "confidence": 0.88,
+        "evidence": [
+          "resume",
+          "github"
+        ]
+      },
+      {
+        "skill": "React",
+        "confidence": 0.82,
+        "evidence": [
+          "github"
+        ]
+      },
+      {
+        "skill": "Node.js",
+        "confidence": 0.85,
+        "evidence": [
+          "resume",
+          "github"
+        ]
+      },
+      {
+        "skill": "Machine Learning",
+        "confidence": 0.78,
+        "evidence": [
+          "resume"
+        ]
+      },
+      {
+        "skill": "Data Analysis",
+        "confidence": 0.8,
+        "evidence": [
+          "resume"
+        ]
+      },
+      {
+        "skill": "API Development",
+        "confidence": 0.83,
+        "evidence": [
+          "github"
+        ]
+      },
+      {
+        "skill": "Git",
+        "confidence": 0.9,
+        "evidence": [
+          "github"
+        ]
+      }
+    ],
+    "programming_languages": [
+      "Python",
+      "JavaScript",
+      "TypeScript",
+      "Java",
+      "SQL"
+    ],
+    "frameworks": [
+      "React",
+      "Node.js",
+      "Express",
+      "Django",
+      "TensorFlow"
+    ],
+    "experience_years": 3.5,
+    "github_analysis": {
+      "total_repositories": 25,
+      "total_stars": 67,
+      "languages": [
+        "Python",
+        "JavaScript",
+        "TypeScript",
+        "Java"
+      ],
+      "recent_activity_score": 0.92,
+      "top_repositories": [
+        {
+          "name": "ai-recruiter-agent",
+          "stars": 15,
+          "language": "Python"
+        },
+        {
+          "name": "ml-project",
+          "stars": 12,
+          "language": "Python"
+        },
+        {
+          "name": "web-app",
+          "stars": 8,
+          "language": "JavaScript"
+        }
+      ]
+    },
+    "job_relevance_score": 0.85,
+    "skill_match_percentage": 0.82,
+    "skill_gaps": [
+      "Kubernetes",
+      "AWS",
+      "Docker"
+    ],
+    "skill_strengths": [
+      "Python",
+      "Machine Learning",
+      "API Development",
+      "React"
+    ]
+  },
+  "test_jobs": [
+    {
+      "title": "Senior Software Engineer",
+      "department": "Engineering",
+      "required_skills": [
+        "Python",
+        "JavaScript",
+        "React",
+        "API Development"
+      ],
+      "preferred_skills": [
+        "Machine Learning",
+        "Node.js",
+        "Git"
+      ],
+      "experience_level": "senior",
+      "responsibilities": [
+        "Design and implement scalable backend services",
+        "Lead technical projects and mentor junior developers",
+        "Collaborate with cross-functional teams"
+      ],
+      "company_context": "Fast-growing tech startup focused on AI/ML solutions"
+    },
+    {
+      "title": "Machine Learning Engineer",
+      "department": "AI/ML",
+      "required_skills": [
+        "Python",
+        "Machine Learning",
+        "Data Analysis"
+      ],
+      "preferred_skills": [
+        "TensorFlow",
+        "Deep Learning",
+        "Statistics"
+      ],
+      "experience_level": "mid",
+      "responsibilities": [
+        "Develop and deploy ML models",
+        "Analyze large datasets",
+        "Optimize model performance"
+      ],
+      "company_context": "AI research company developing cutting-edge ML solutions"
+    }
+  ],
+  "test_results": [
+    {
+      "job_title": "Senior Software Engineer",
+      "style": "concise",
+      "success": false,
+      "error": "Narrative generation failed: All connection attempts failed"
+    },
+    {
+      "job_title": "Senior Software Engineer",
+      "style": "comprehensive",
+      "success": false,
+      "error": "Narrative generation failed: All connection attempts failed"
+    },
+    {
+      "job_title": "Machine Learning Engineer",
+      "style": "concise",
+      "success": false,
+      "error": "Narrative generation failed: All connection attempts failed"
+    },
+    {
+      "job_title": "Machine Learning Engineer",
+      "style": "comprehensive",
+      "success": false,
+      "error": "Narrative generation failed: All connection attempts failed"
+    }
+  ],
+  "summary": {
+    "total_tests": 4,
+    "successful_tests": 0,
+    "failed_tests": 4,
+    "success_rate": 0.0,
+    "avg_confidence": 0,
+    "avg_processing_time": 0
+  }
+}

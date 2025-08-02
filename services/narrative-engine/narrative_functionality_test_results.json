@@ -1,0 +1,25 @@
+{
+  "test_timestamp": "2025-08-02T14:17:30.284773",
+  "test_results": {
+    "service_health": true,
+    "api_endpoints": {
+      "health": true,
+      "capabilities": true,
+      "styles": true,
+      "providers": true
+    },
+    "data_models": true,
+    "prompt_building": true,
+    "error_handling": true,
+    "integration_points": true
+  },
+  "overall_score": 100.0,
+  "passed_tests": 6,
+  "total_tests": 6,
+  "api_endpoints": {
+    "health": true,
+    "capabilities": true,
+    "styles": true,
+    "providers": true
+  }
+}
