@@ -1,350 +1,466 @@
 #!/usr/bin/env python3
-"""Test script for Data Enrichment Service with real data."""
+"""
+Comprehensive test script for Data Enrichment Service.
+Tests all endpoints and functionality with realistic data.
+"""
 
 import asyncio
 import json
-import sys
-import os
-from pathlib import Path
-
-# Add the src directory to the Python path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-from data_enrichment.core.models import (
-    EnrichmentRequest,
-    ExtractedResumeData,
-    PersonalInfo,
-    ConfidenceField,
-    GitHubProfile,
-    GitHubProfileMatch,
-    GitHubRepository,
-    JobContext,
-    ExperienceLevel
-)
-from data_enrichment.services.enrichment_service import EnrichmentService
+import time
+from typing import Dict, Any
+import aiohttp
+import requests
 
 
-def load_test_data():
-    """Load test data from the profile discovery service."""
+class DataEnrichmentTester:
+    """Test suite for Data Enrichment Service."""
     
-    # Load resume data from the resume parser output
-    resume_file = Path(__file__).parent.parent / "profile-discovery" / "resume_output.json"
+    def __init__(self, base_url: str = "http://localhost:8002"):
+        self.base_url = base_url
+        self.session = None
     
-    if not resume_file.exists():
-        print(f"❌ Resume data file not found: {resume_file}")
-        return None
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
     
-    try:
-        with open(resume_file, 'r') as f:
-            resume_data = json.load(f)
-        print(f"✅ Loaded resume data from {resume_file}")
-        return resume_data
-    except Exception as e:
-        print(f"❌ Failed to load resume data: {e}")
-        return None
-
-
-def create_test_github_profile():
-    """Create a test GitHub profile based on Sachin's real profile."""
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
     
-    # Create GitHub repositories
-    repositories = [
-        GitHubRepository(
-            name="recruitraptor",
-            full_name="sachinkumar/recruitraptor",
-            description="AI Recruiter Agent - Intelligent recruitment platform",
-            language="Python",
-            stars=5,
-            forks=2,
-            created_at="2024-01-15T00:00:00Z",
-            updated_at="2024-12-15T00:00:00Z",
-            topics=["ai", "recruitment", "python", "fastapi", "machine-learning"],
-            is_fork=False,
-            is_archived=False
-        ),
-        GitHubRepository(
-            name="data-science-project",
-            full_name="sachinkumar/data-science-project",
-            description="Machine learning and data analysis projects",
-            language="Python",
-            stars=3,
-            forks=1,
-            created_at="2023-06-10T00:00:00Z",
-            updated_at="2024-11-20T00:00:00Z",
-            topics=["machine-learning", "data-science", "python", "jupyter"],
-            is_fork=False,
-            is_archived=False
-        ),
-        GitHubRepository(
-            name="web-app",
-            full_name="sachinkumar/web-app",
-            description="Modern web application with React and Node.js",
-            language="JavaScript",
-            stars=2,
-            forks=0,
-            created_at="2023-03-15T00:00:00Z",
-            updated_at="2024-10-05T00:00:00Z",
-            topics=["react", "nodejs", "javascript", "web-development"],
-            is_fork=False,
-            is_archived=False
-        )
-    ]
+    def create_sample_resume_data(self) -> Dict[str, Any]:
+        """Create sample resume data for testing."""
+        return {
+            "personal_info": {
+                "name": {"value": "John Doe", "confidence": 0.95},
+                "email": {"value": "john.doe@email.com", "confidence": 0.90},
+                "phone": {"value": "+1-555-123-4567", "confidence": 0.85},
+                "location": {"value": "San Francisco, CA", "confidence": 0.80},
+                "linkedin_url": {"value": "https://linkedin.com/in/johndoe", "confidence": 0.75},
+                "github_url": {"value": "https://github.com/johndoe", "confidence": 0.70},
+                "confidence": 0.85
+            },
+            "education": {
+                "institutions": ["Stanford University"],
+                "degrees": ["Bachelor of Science in Computer Science"],
+                "fields_of_study": ["Computer Science"],
+                "dates": ["2018-2022"],
+                "gpa": 3.8
+            },
+            "experience": {
+                "companies": ["Tech Corp", "Startup Inc"],
+                "positions": ["Senior Software Engineer", "Software Engineer"],
+                "dates": ["2022-Present", "2020-2022"],
+                "descriptions": [
+                    "Led development of microservices architecture",
+                    "Built full-stack web applications"
+                ],
+                "technologies_used": {
+                    "Tech Corp": ["Python", "Django", "PostgreSQL", "AWS"],
+                    "Startup Inc": ["JavaScript", "React", "Node.js", "MongoDB"]
+                }
+            },
+            "skills": {
+                "technical_skills": [
+                    "Python", "JavaScript", "React", "Node.js", "Django",
+                    "PostgreSQL", "MongoDB", "AWS", "Docker", "Kubernetes"
+                ],
+                "soft_skills": [
+                    "Leadership", "Problem Solving", "Team Collaboration"
+                ],
+                "categories": {
+                    "programming_languages": ["Python", "JavaScript"],
+                    "frameworks": ["React", "Node.js", "Django"],
+                    "databases": ["PostgreSQL", "MongoDB"],
+                    "cloud_platforms": ["AWS"],
+                    "tools": ["Docker", "Kubernetes"]
+                }
+            },
+            "metadata": {
+                "parsing_confidence": 0.85,
+                "source": "resume_parser"
+            }
+        }
     
-    # Create GitHub profile
-    github_profile = GitHubProfile(
-        username="sachinkumar",
-        name="Sachin Kumar",
-        bio="Software Engineer | AI/ML Enthusiast | Open Source Contributor",
-        location="San Francisco, CA",
-        company="Tech Company",
-        email="sachin.kumar@example.com",
-        blog="https://sachinkumar.dev",
-        public_repos=15,
-        public_gists=5,
-        followers=25,
-        following=30,
-        created_at="2020-01-15T00:00:00Z",
-        updated_at="2024-12-15T00:00:00Z",
-        avatar_url="https://avatars.githubusercontent.com/u/sachinkumar",
-        profile_url="https://github.com/sachinkumar"
-    )
+    def create_sample_github_profile(self) -> Dict[str, Any]:
+        """Create sample GitHub profile data for testing."""
+        return {
+            "profile": {
+                "username": "johndoe",
+                "name": "John Doe",
+                "bio": "Full-stack developer passionate about building scalable applications",
+                "location": "San Francisco, CA",
+                "company": "Tech Corp",
+                "email": "john.doe@email.com",
+                "blog": "https://johndoe.dev",
+                "public_repos": 25,
+                "public_gists": 10,
+                "followers": 150,
+                "following": 75,
+                "created_at": "2018-01-15T00:00:00Z",
+                "updated_at": "2024-01-15T00:00:00Z",
+                "avatar_url": "https://avatars.githubusercontent.com/u/12345678",
+                "profile_url": "https://github.com/johndoe"
+            },
+            "confidence": 0.90,
+            "match_reasoning": "Email and name match with resume data",
+            "repositories": [
+                {
+                    "name": "awesome-project",
+                    "full_name": "johndoe/awesome-project",
+                    "description": "A full-stack web application",
+                    "language": "Python",
+                    "stars": 45,
+                    "forks": 12,
+                    "created_at": "2023-01-01T00:00:00Z",
+                    "updated_at": "2024-01-15T00:00:00Z",
+                    "topics": ["python", "django", "react"],
+                    "is_fork": False,
+                    "is_archived": False
+                },
+                {
+                    "name": "microservice-api",
+                    "full_name": "johndoe/microservice-api",
+                    "description": "RESTful API built with FastAPI",
+                    "language": "Python",
+                    "stars": 23,
+                    "forks": 8,
+                    "created_at": "2023-06-01T00:00:00Z",
+                    "updated_at": "2024-01-10T00:00:00Z",
+                    "topics": ["fastapi", "python", "api"],
+                    "is_fork": False,
+                    "is_archived": False
+                }
+            ],
+            "languages_used": {
+                "Python": 60,
+                "JavaScript": 25,
+                "TypeScript": 10,
+                "Go": 5
+            },
+            "frameworks_detected": ["Django", "FastAPI", "React", "Express"]
+        }
     
-    # Create GitHub profile match
-    github_profile_match = GitHubProfileMatch(
-        profile=github_profile,
-        confidence=0.85,
-        match_reasoning="High confidence match based on name, location, and repository analysis",
-        repositories=repositories,
-        languages_used={
-            "Python": 8,
-            "JavaScript": 5,
-            "TypeScript": 3,
-            "HTML": 2,
-            "CSS": 2
-        },
-        frameworks_detected=[
-            "FastAPI",
-            "React",
-            "Node.js",
-            "Django",
-            "TensorFlow",
-            "Pandas"
+    def create_sample_linkedin_profile(self) -> Dict[str, Any]:
+        """Create sample LinkedIn profile data for testing."""
+        return {
+            "profile": {
+                "profile_url": "https://linkedin.com/in/johndoe",
+                "name": "John Doe",
+                "headline": "Senior Software Engineer at Tech Corp",
+                "location": "San Francisco Bay Area",
+                "current_position": "Senior Software Engineer",
+                "current_company": "Tech Corp",
+                "summary": "Experienced software engineer with 4+ years building scalable applications",
+                "experience_count": 3,
+                "education_count": 1
+            },
+            "confidence": 0.85,
+            "match_reasoning": "Name and company match with resume data"
+        }
+    
+    def create_sample_job_context(self) -> Dict[str, Any]:
+        """Create sample job context for testing."""
+        return {
+            "required_skills": ["Python", "JavaScript", "React", "PostgreSQL"],
+            "preferred_skills": ["Django", "Node.js", "AWS", "Docker"],
+            "experience_level": "senior",
+            "role_type": "fullstack",
+            "industry": "technology",
+            "company_size": "mid-size",
+            "location_requirements": "San Francisco Bay Area"
+        }
+    
+    async def test_health_check(self) -> bool:
+        """Test health check endpoint."""
+        print("\n🔍 Testing Health Check...")
+        
+        try:
+            async with self.session.get(f"{self.base_url}/health") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Health Check: {data['status']}")
+                    print(f"   Version: {data['version']}")
+                    print(f"   Uptime: {data['uptime_seconds']:.2f} seconds")
+                    return True
+                else:
+                    print(f"❌ Health Check failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Health Check error: {e}")
+            return False
+    
+    async def test_root_endpoint(self) -> bool:
+        """Test root endpoint."""
+        print("\n🔍 Testing Root Endpoint...")
+        
+        try:
+            async with self.session.get(f"{self.base_url}/") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Root Endpoint: {data['service']}")
+                    print(f"   Status: {data['status']}")
+                    print(f"   Version: {data['version']}")
+                    return True
+                else:
+                    print(f"❌ Root endpoint failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Root endpoint error: {e}")
+            return False
+    
+    async def test_capabilities(self) -> bool:
+        """Test capabilities endpoint."""
+        print("\n🔍 Testing Capabilities...")
+        
+        try:
+            async with self.session.get(f"{self.base_url}/api/v1/capabilities") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Capabilities: {data['service_name']}")
+                    print(f"   Supported sources: {', '.join(data['supported_data_sources'])}")
+                    print(f"   Algorithms: {', '.join(data['supported_algorithms'])}")
+                    return True
+                else:
+                    print(f"❌ Capabilities failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Capabilities error: {e}")
+            return False
+    
+    async def test_configuration(self) -> bool:
+        """Test configuration endpoint."""
+        print("\n🔍 Testing Configuration...")
+        
+        try:
+            async with self.session.get(f"{self.base_url}/api/v1/config") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Configuration retrieved")
+                    print(f"   Min confidence: {data['min_confidence_threshold']}")
+                    print(f"   Skill weighting: {data['skill_weighting_factor']}")
+                    return True
+                else:
+                    print(f"❌ Configuration failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Configuration error: {e}")
+            return False
+    
+    async def test_validation(self) -> bool:
+        """Test request validation endpoint."""
+        print("\n🔍 Testing Request Validation...")
+        
+        # Create a valid request
+        valid_request = {
+            "resume_data": self.create_sample_resume_data(),
+            "github_profiles": [self.create_sample_github_profile()],
+            "linkedin_profiles": [self.create_sample_linkedin_profile()]
+        }
+        
+        try:
+            async with self.session.post(
+                f"{self.base_url}/api/v1/validate",
+                json=valid_request
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Validation: {data['valid']}")
+                    print(f"   Error count: {data['error_count']}")
+                    return data['valid']
+                else:
+                    print(f"❌ Validation failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Validation error: {e}")
+            return False
+    
+    async def test_basic_enrichment(self) -> bool:
+        """Test basic enrichment without job context."""
+        print("\n🔍 Testing Basic Enrichment...")
+        
+        request_data = {
+            "resume_data": self.create_sample_resume_data(),
+            "github_profiles": [self.create_sample_github_profile()],
+            "linkedin_profiles": [self.create_sample_linkedin_profile()]
+        }
+        
+        try:
+            start_time = time.time()
+            async with self.session.post(
+                f"{self.base_url}/api/v1/enrich",
+                json=request_data
+            ) as response:
+                processing_time = time.time() - start_time
+                
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Basic Enrichment successful")
+                    print(f"   Processing time: {processing_time:.2f}s")
+                    print(f"   Overall confidence: {data['enriched_profile']['overall_confidence']}")
+                    print(f"   Data sources: {len(data['enriched_profile']['data_sources'])}")
+                    
+                    # Print some key insights
+                    profile = data['enriched_profile']
+                    print(f"   Name: {profile['personal_info']['name']}")
+                    print(f"   Skills count: {len(profile['skills']['technical_skills'])}")
+                    print(f"   GitHub repos: {profile['github_analysis']['total_repositories']}")
+                    
+                    return True
+                else:
+                    error_data = await response.json()
+                    print(f"❌ Basic enrichment failed: {response.status}")
+                    print(f"   Error: {error_data}")
+                    return False
+        except Exception as e:
+            print(f"❌ Basic enrichment error: {e}")
+            return False
+    
+    async def test_enrichment_with_job_context(self) -> bool:
+        """Test enrichment with job context."""
+        print("\n🔍 Testing Enrichment with Job Context...")
+        
+        request_data = {
+            "resume_data": self.create_sample_resume_data(),
+            "github_profiles": [self.create_sample_github_profile()],
+            "linkedin_profiles": [self.create_sample_linkedin_profile()],
+            "job_context": self.create_sample_job_context()
+        }
+        
+        try:
+            start_time = time.time()
+            async with self.session.post(
+                f"{self.base_url}/api/v1/enrich",
+                json=request_data
+            ) as response:
+                processing_time = time.time() - start_time
+                
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Job Context Enrichment successful")
+                    print(f"   Processing time: {processing_time:.2f}s")
+                    print(f"   Job relevance: {data['enriched_profile']['job_relevance_score']}")
+                    print(f"   Skill match: {data['enriched_profile']['skill_match_percentage']}")
+                    
+                    # Print skill analysis
+                    profile = data['enriched_profile']
+                    print(f"   Skill gaps: {len(profile['skills']['skill_gaps'])}")
+                    print(f"   Skill strengths: {len(profile['skills']['skill_strengths'])}")
+                    
+                    return True
+                else:
+                    error_data = await response.json()
+                    print(f"❌ Job context enrichment failed: {response.status}")
+                    print(f"   Error: {error_data}")
+                    return False
+        except Exception as e:
+            print(f"❌ Job context enrichment error: {e}")
+            return False
+    
+    async def test_statistics(self) -> bool:
+        """Test statistics endpoint."""
+        print("\n🔍 Testing Statistics...")
+        
+        try:
+            async with self.session.get(f"{self.base_url}/api/v1/statistics") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"✅ Statistics retrieved")
+                    print(f"   Service: {data['service_name']}")
+                    print(f"   Version: {data['version']}")
+                    print(f"   Success rate: {data['success_rate']}")
+                    return True
+                else:
+                    print(f"❌ Statistics failed: {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Statistics error: {e}")
+            return False
+    
+    async def test_error_handling(self) -> bool:
+        """Test error handling with invalid requests."""
+        print("\n🔍 Testing Error Handling...")
+        
+        # Test with missing resume data
+        invalid_request = {
+            "github_profiles": [self.create_sample_github_profile()]
+        }
+        
+        try:
+            async with self.session.post(
+                f"{self.base_url}/api/v1/enrich",
+                json=invalid_request
+            ) as response:
+                if response.status == 400:
+                    print("✅ Error handling: Correctly rejected invalid request")
+                    return True
+                else:
+                    print(f"❌ Error handling: Expected 400, got {response.status}")
+                    return False
+        except Exception as e:
+            print(f"❌ Error handling test failed: {e}")
+            return False
+    
+    async def run_all_tests(self):
+        """Run all tests and provide summary."""
+        print("🚀 Starting Data Enrichment Service Tests")
+        print("=" * 50)
+        
+        tests = [
+            ("Health Check", self.test_health_check),
+            ("Root Endpoint", self.test_root_endpoint),
+            ("Capabilities", self.test_capabilities),
+            ("Configuration", self.test_configuration),
+            ("Validation", self.test_validation),
+            ("Basic Enrichment", self.test_basic_enrichment),
+            ("Job Context Enrichment", self.test_enrichment_with_job_context),
+            ("Statistics", self.test_statistics),
+            ("Error Handling", self.test_error_handling)
         ]
-    )
-    
-    return github_profile_match
-
-
-def convert_resume_data(resume_json):
-    """Convert resume JSON data to ExtractedResumeData model."""
-    
-    try:
-        # Extract personal info
-        personal_info = PersonalInfo(
-            name=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("name", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("name", {}).get("confidence", 0.8)
-            ),
-            email=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("email", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("email", {}).get("confidence", 0.9)
-            ),
-            phone=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("phone", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("phone", {}).get("confidence", 0.8)
-            ),
-            location=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("location", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("location", {}).get("confidence", 0.7)
-            ),
-            linkedin_url=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("linkedin_url", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("linkedin_url", {}).get("confidence", 0.6)
-            ),
-            github_url=ConfidenceField(
-                value=resume_json.get("personal_info", {}).get("github_url", {}).get("value"),
-                confidence=resume_json.get("personal_info", {}).get("github_url", {}).get("confidence", 0.9)
-            ),
-            confidence=resume_json.get("personal_info", {}).get("confidence", 0.8)
-        )
         
-        # Create ExtractedResumeData
-        extracted_data = ExtractedResumeData(
-            personal_info=personal_info,
-            education=resume_json.get("education", {}),
-            experience=resume_json.get("experience", {}),
-            skills=resume_json.get("skills", {}),
-            metadata=resume_json.get("metadata", {})
-        )
+        results = []
         
-        return extracted_data
+        for test_name, test_func in tests:
+            try:
+                result = await test_func()
+                results.append((test_name, result))
+            except Exception as e:
+                print(f"❌ {test_name} failed with exception: {e}")
+                results.append((test_name, False))
         
-    except Exception as e:
-        print(f"❌ Failed to convert resume data: {e}")
-        return None
-
-
-async def test_enrichment_service():
-    """Test the enrichment service with real data."""
-    
-    print("🚀 Testing Data Enrichment Service with Real Data")
-    print("=" * 60)
-    
-    # Load test data
-    resume_json = load_test_data()
-    if not resume_json:
-        print("❌ Cannot proceed without resume data")
-        return
-    
-    # Convert resume data
-    resume_data = convert_resume_data(resume_json)
-    if not resume_data:
-        print("❌ Failed to convert resume data")
-        return
-    
-    # Create GitHub profile
-    github_profile = create_test_github_profile()
-    
-    # Create job context
-    job_context = JobContext(
-        required_skills=["Python", "JavaScript", "FastAPI", "React"],
-        preferred_skills=["Machine Learning", "Docker", "AWS"],
-        experience_level=ExperienceLevel.MID,
-        role_type="fullstack",
-        industry="technology",
-        company_size="startup"
-    )
-    
-    # Create enrichment request
-    request = EnrichmentRequest(
-        resume_data=resume_data,
-        github_profiles=[github_profile],
-        linkedin_profiles=[],  # No LinkedIn profiles for this test
-        job_context=job_context
-    )
-    
-    print(f"✅ Created enrichment request with:")
-    print(f"   - Resume data: {resume_data.personal_info.name.value}")
-    print(f"   - GitHub profile: {github_profile.profile.username}")
-    print(f"   - Job context: {job_context.role_type} role")
-    
-    # Initialize enrichment service
-    service = EnrichmentService()
-    
-    print("\n🔄 Processing enrichment request...")
-    
-    try:
-        # Perform enrichment
-        response = await service.enrich_candidate_data(request)
+        # Print summary
+        print("\n" + "=" * 50)
+        print("📊 TEST SUMMARY")
+        print("=" * 50)
         
-        if response.success:
-            print("✅ Enrichment completed successfully!")
-            print(f"   - Processing time: {response.processing_time_ms:.2f}ms")
-            print(f"   - Overall confidence: {response.enriched_profile.overall_confidence:.2f}")
-            print(f"   - Data sources: {len(response.enriched_profile.data_sources)}")
-            
-            # Display enriched profile details
-            profile = response.enriched_profile
-            print(f"\n📋 Enriched Profile Details:")
-            print(f"   - Candidate ID: {profile.candidate_id}")
-            print(f"   - Name: {profile.personal_info.name}")
-            print(f"   - Email: {profile.personal_info.email}")
-            print(f"   - Location: {profile.personal_info.location}")
-            print(f"   - GitHub: {profile.personal_info.github_url}")
-            
-            # Display skills analysis
-            print(f"\n💻 Skills Analysis:")
-            print(f"   - Technical skills: {len(profile.skills.technical_skills)}")
-            print(f"   - Programming languages: {list(profile.skills.programming_languages.keys())}")
-            print(f"   - Frameworks: {list(profile.skills.frameworks.keys())}")
-            print(f"   - Overall confidence: {profile.skills.overall_confidence:.2f}")
-            
-            # Display GitHub analysis
-            print(f"\n🔗 GitHub Analysis:")
-            print(f"   - Total repositories: {profile.github_analysis.total_repositories}")
-            print(f"   - Total stars: {profile.github_analysis.total_stars}")
-            print(f"   - Languages: {list(profile.github_analysis.languages_distribution.keys())}")
-            print(f"   - Recent activity score: {profile.github_analysis.recent_activity_score:.2f}")
-            
-            # Display job relevance
-            if profile.job_relevance_score:
-                print(f"\n🎯 Job Relevance:")
-                print(f"   - Job relevance score: {profile.job_relevance_score:.2f}")
-                print(f"   - Skill match percentage: {profile.skill_match_percentage:.2f}")
-                print(f"   - Skill gaps: {profile.skills.skill_gaps}")
-                print(f"   - Skill strengths: {profile.skills.skill_strengths}")
-            
-            # Display conflicts resolved
-            if response.enrichment_metadata.conflicts_resolved:
-                print(f"\n⚖️ Conflicts Resolved:")
-                for conflict in response.enrichment_metadata.conflicts_resolved:
-                    print(f"   - {conflict.field_name}: {conflict.resolution_strategy.value}")
-            
-            print(f"\n✅ Test completed successfully!")
-            print(f"   - Enrichment version: {response.enrichment_metadata.enrichment_version}")
-            print(f"   - Algorithms used: {response.enrichment_metadata.algorithms_used}")
-            
+        passed = 0
+        total = len(results)
+        
+        for test_name, result in results:
+            status = "✅ PASS" if result else "❌ FAIL"
+            print(f"{status} {test_name}")
+            if result:
+                passed += 1
+        
+        print(f"\nResults: {passed}/{total} tests passed")
+        
+        if passed == total:
+            print("🎉 All tests passed! Data Enrichment Service is working correctly.")
         else:
-            print(f"❌ Enrichment failed: {response.error_message}")
-            
-    except Exception as e:
-        print(f"❌ Test failed with error: {e}")
-        import traceback
-        traceback.print_exc()
+            print("⚠️  Some tests failed. Check the service logs for details.")
+        
+        return passed == total
 
 
-async def test_validation():
-    """Test request validation."""
+async def main():
+    """Main test runner."""
+    print("Data Enrichment Service Test Suite")
+    print("Make sure the service is running on http://localhost:8002")
     
-    print("\n🔍 Testing Request Validation")
-    print("=" * 40)
-    
-    service = EnrichmentService()
-    
-    # Test valid request
-    resume_data = ExtractedResumeData(
-        personal_info=PersonalInfo(
-            name=ConfidenceField(value="Test User"),
-            confidence=0.8
-        ),
-        skills={"technical_skills": ["Python", "JavaScript"]}
-    )
-    
-    github_profile = GitHubProfileMatch(
-        profile=GitHubProfile(
-            username="testuser",
-            profile_url="https://github.com/testuser"
-        ),
-        confidence=0.8,
-        match_reasoning="Test match"
-    )
-    
-    valid_request = EnrichmentRequest(
-        resume_data=resume_data,
-        github_profiles=[github_profile]
-    )
-    
-    errors = await service.validate_enrichment_request(valid_request)
-    print(f"✅ Valid request validation: {len(errors)} errors")
-    
-    # Test invalid request (empty resume data)
-    invalid_request = EnrichmentRequest(
-        resume_data=ExtractedResumeData(
-            personal_info=PersonalInfo(
-                name=ConfidenceField(value=""),  # Empty name
-                confidence=0.8
-            ),
-            skills={}  # Empty skills
-        ),
-        github_profiles=[github_profile]
-    )
-    
-    errors = await service.validate_enrichment_request(invalid_request)
-    print(f"✅ Invalid request validation: {len(errors)} errors")
-    for error in errors:
-        print(f"   - {error}")
+    async with DataEnrichmentTester() as tester:
+        success = await tester.run_all_tests()
+        return success
 
 
 if __name__ == "__main__":
-    asyncio.run(test_enrichment_service())
-    asyncio.run(test_validation()) 
+    success = asyncio.run(main())
+    exit(0 if success else 1) 
