@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "narrative-engine"
+version = "0.1.0"
+description = "AI-powered narrative generation for candidate assessments"
+authors = ["AI Recruiter Team"]
+readme = "README.md"
+packages = [{include = "narrative_engine", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "0.104.1"
+uvicorn = "0.24.0"
+pydantic = "2.11.7"
+pydantic-settings = "2.10.1"
+openai = "1.3.0"
+anthropic = "0.7.0"
+httpx = "0.25.2"
+structlog = "23.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+pytest-asyncio = "^0.21.0"
+httpx = "^0.25.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto" 
