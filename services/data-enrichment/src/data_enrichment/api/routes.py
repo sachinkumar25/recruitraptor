@@ -1,9 +1,11 @@
 """API routes for Data Enrichment Service."""
 
 import time
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..core.database import get_db
 
 from ..core.models import (
     EnrichmentRequest,
@@ -11,7 +13,8 @@ from ..core.models import (
     HealthCheckResponse,
     ErrorResponse,
     create_error_response,
-    create_health_response
+    create_health_response,
+    EnrichedCandidateProfile
 )
 from ..services.enrichment_service import EnrichmentService
 from ..core.config import settings
@@ -30,9 +33,10 @@ service_start_time = time.time()
 @router.post("/enrich", response_model=EnrichmentResponse)
 async def enrich_candidate_data(
     request: EnrichmentRequest,
-    http_request: Request
+    http_request: Request,
+    db: AsyncSession = Depends(get_db)
 ):
-    """Enrich candidate data by combining resume and profile discovery data."""
+    """Enrich candidate data by combining and analyzing multiple sources."""
     
     start_time = time.time()
     
@@ -60,7 +64,7 @@ async def enrich_candidate_data(
             raise HTTPException(status_code=400, detail=error_response.dict())
         
         # Perform enrichment
-        response = await enrichment_service.enrich_candidate_data(request)
+        response = await enrichment_service.enrich_candidate_data(request, db)
         
         # Log response
         processing_time_ms = (time.time() - start_time) * 1000
@@ -102,6 +106,21 @@ async def enrich_candidate_data(
         )
         
         raise HTTPException(status_code=500, detail=error_response.dict())
+
+
+@router.get("/profiles", response_model=List[EnrichedCandidateProfile])
+async def get_all_profiles(db: AsyncSession = Depends(get_db)):
+    """Get all stored profiles."""
+    return await enrichment_service.get_all_profiles(db)
+
+
+@router.get("/profiles/{candidate_id}", response_model=EnrichedCandidateProfile)
+async def get_profile(candidate_id: str, db: AsyncSession = Depends(get_db)):
+    """Get a specific profile by ID."""
+    profile = await enrichment_service.get_profile(candidate_id, db)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
 
 
 @router.get("/health", response_model=HealthCheckResponse)
@@ -150,11 +169,11 @@ async def health_check():
 
 
 @router.get("/statistics")
-async def get_statistics():
+async def get_statistics(db: AsyncSession = Depends(get_db)):
     """Get enrichment service statistics."""
     
     try:
-        stats = await enrichment_service.get_enrichment_statistics()
+        stats = await enrichment_service.get_enrichment_statistics(db)
         return stats
         
     except Exception as e:

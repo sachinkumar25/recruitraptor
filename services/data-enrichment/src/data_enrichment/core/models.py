@@ -36,6 +36,7 @@ class ConflictResolution(str, Enum):
     """Conflict resolution strategies."""
     RESUME_PRIORITY = "resume_priority"
     GITHUB_PRIORITY = "github_priority"
+    LINKEDIN_PRIORITY = "linkedin_priority"
     HIGHEST_CONFIDENCE = "highest_confidence"
     MERGE = "merge"
     MANUAL_REVIEW = "manual_review"
@@ -223,10 +224,10 @@ class GitHubRepositoryInsights(BaseModel):
     languages_distribution: Dict[str, int] = Field(default_factory=dict)
     frameworks_detected: List[str] = Field(default_factory=list)
     most_active_repos: List[str] = Field(default_factory=list)
-    recent_activity_score: float = Field(ge=0.0, le=1.0)
+    recent_activity_score: float = Field(default=0.0, ge=0.0, le=1.0)
     code_quality_indicators: Dict[str, Any] = Field(default_factory=dict)
     collaboration_patterns: Dict[str, Any] = Field(default_factory=dict)
-    open_source_contribution_score: float = Field(ge=0.0, le=1.0)
+    open_source_contribution_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class EnrichedCandidateProfile(BaseModel):

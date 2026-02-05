@@ -15,7 +15,10 @@ from ..core.models import (
 )
 from ..clients.github_client import GitHubClient
 from ..clients.search_client import SearchClient
+from ..clients.linkedin_client import LinkedInClient, get_linkedin_client
+from ..core.permutators import EmailPermutator
 from ..utils.logger import get_logger
+from difflib import SequenceMatcher
 
 logger = get_logger(__name__)
 
@@ -26,15 +29,16 @@ class DiscoveryService:
     def __init__(self):
         """Initialize discovery service."""
         self.logger = logger
-        
+
         # Initialize clients
         self.github_client = GitHubClient()
-        self.search_client = SearchClient()
-        
+        self.search_client = SearchClient()  # SerpAPI fallback
+        self.linkedin_client: LinkedInClient = get_linkedin_client()  # Playwright-based primary
+
         # Initialize Redis for caching
         self.redis_client = None
         self._init_redis()
-        
+
         # Initialize HTTP client for Resume Parser communication
         self.http_client = httpx.AsyncClient(timeout=settings.request_timeout)
     
@@ -294,37 +298,53 @@ class DiscoveryService:
                 else:
                     self.logger.warning("GitHub profile not found for provided URL", username=username)
         
-        # Strategy 1: Email-based search
         if candidate_info['email']:
             self.logger.info("Performing email-based GitHub search", email=candidate_info['email'])
-            email_results = self.github_client.search_users_by_email(candidate_info['email'])
-            for result in email_results:
-                username = result['username']
-                if username not in seen_usernames:
-                    profile = self.github_client.get_user_profile(username)
-                    if profile:
-                        confidence, reasoning = self.github_client.validate_profile_match(profile, candidate_data.model_dump())
-                        if confidence >= options.min_confidence_score:
-                            # Get repositories and analysis
-                            repositories = []
-                            languages_used = {}
-                            frameworks_detected = []
-                            
-                            if options.include_repository_analysis:
-                                repositories = self.github_client.get_user_repositories(username)
-                                languages_used, frameworks_detected = self.github_client.analyze_languages_and_frameworks(repositories)
-                            
-                            match = GitHubProfileMatch(
-                                profile=profile,
-                                confidence=confidence,
-                                match_reasoning=reasoning,
-                                repositories=repositories,
-                                languages_used=languages_used,
-                                frameworks_detected=frameworks_detected,
-                                discovery_strategy=DiscoveryStrategy.EMAIL_BASED
-                            )
-                            github_profiles.append(match)
-                            seen_usernames.add(username)
+            
+            # Use Permutator to generate variants
+            email_variants = [candidate_info['email']]
+            email_variants.extend(EmailPermutator.generate_variants(candidate_info['email']))
+            
+            # Deduplicate
+            email_variants = list(set(email_variants))
+            self.logger.info(f"Generated {len(email_variants)} email variants for search")
+
+            for email_variant in email_variants:
+                 # Search by email (or variant as username if it looks like one)
+                 # Note: search_users_by_email usually expects an email, but we can also try username search if variant has no @
+                 if '@' in email_variant:
+                      results = self.github_client.search_users_by_email(email_variant)
+                 else:
+                      # If it's a username guess
+                      results = [{'username': email_variant}] 
+
+                 for result in results:
+                    username = result['username']
+                    if username not in seen_usernames:
+                        profile = self.github_client.get_user_profile(username)
+                        if profile:
+                            confidence, reasoning = self.github_client.validate_profile_match(profile, candidate_data.model_dump())
+                            if confidence >= options.min_confidence_score:
+                                # Get repositories and analysis
+                                repositories = []
+                                languages_used = {}
+                                frameworks_detected = []
+                                
+                                if options.include_repository_analysis:
+                                    repositories = self.github_client.get_user_repositories(username)
+                                    languages_used, frameworks_detected = self.github_client.analyze_languages_and_frameworks(repositories)
+                                
+                                match = GitHubProfileMatch(
+                                    profile=profile,
+                                    confidence=confidence,
+                                    match_reasoning=reasoning,
+                                    repositories=repositories,
+                                    languages_used=languages_used,
+                                    frameworks_detected=frameworks_detected,
+                                    discovery_strategy=DiscoveryStrategy.EMAIL_BASED
+                                )
+                                github_profiles.append(match)
+                                seen_usernames.add(username)
         
         # Strategy 2: Name and context search
         if candidate_info['name']:
@@ -363,27 +383,54 @@ class DiscoveryService:
                             github_profiles.append(match)
                             seen_usernames.add(username)
         
+        # Levenshtein Cross-Validation (Level 4 Requirement)
+        # Filter out results with low name similarity unless confirmed by other strong signals (like email match)
+        validated_profiles = []
+        for match in github_profiles:
+            # If we matched by EMAIL or DIRECT_URL, we trust it more. 
+            # If matched by NAME, we need to be strict.
+            if match.discovery_strategy == DiscoveryStrategy.NAME_CONTEXT:
+                 profile_name = match.profile.name or match.profile.login or ""
+                 candidate_name = candidate_info['name'] or ""
+                 
+                 similarity = SequenceMatcher(None, profile_name.lower(), candidate_name.lower()).ratio()
+                 
+                 if similarity < 0.6: # configurable threshold
+                      self.logger.info("Rejecting GitHub profile due to low name similarity", 
+                                     username=match.profile.login, 
+                                     similarity=similarity)
+                      continue
+            
+            validated_profiles.append(match)
+
         # Sort by confidence and limit results
-        github_profiles.sort(key=lambda x: x.confidence, reverse=True)
-        return github_profiles[:options.max_github_results]
+        validated_profiles.sort(key=lambda x: x.confidence, reverse=True)
+        return validated_profiles[:options.max_github_results]
     
     async def _discover_linkedin_profiles(self, candidate_info: Dict[str, Any], options: Any, candidate_data: ExtractedResumeData) -> List[LinkedInProfileMatch]:
-        """Discover LinkedIn profiles using multiple strategies."""
-        self.logger.info("Starting LinkedIn profile discovery", 
+        """Discover LinkedIn profiles using Playwright (primary) with SerpAPI fallback."""
+        self.logger.info("Starting LinkedIn profile discovery with Playwright",
                         candidate_info=candidate_info,
                         options=options.model_dump() if hasattr(options, 'model_dump') else str(options))
-        
+
         linkedin_profiles = []
-        
-        # Strategy 0: Direct URL validation (highest priority)
+        seen_urls = set()
+
+        # Strategy 0: Direct URL validation (highest priority) - Use Playwright
         if candidate_info['linkedin_url']:
-            self.logger.info("Checking provided LinkedIn URL", url=candidate_info['linkedin_url'])
+            self.logger.info("Checking provided LinkedIn URL with Playwright", url=candidate_info['linkedin_url'])
             profile_url = self._normalize_linkedin_url(candidate_info['linkedin_url'])
             if profile_url:
-                # Extract profile data from provided URL
-                profile = self.search_client.extract_linkedin_profile_data(profile_url)
+                # Try Playwright first for comprehensive data extraction
+                profile = await self.linkedin_client.extract_profile_data(profile_url)
+
+                if not profile:
+                    # Fallback to SerpAPI/requests approach
+                    self.logger.info("Playwright extraction failed, falling back to SerpAPI", url=profile_url)
+                    profile = self.search_client.extract_linkedin_profile_data(profile_url)
+
                 if profile:
-                    confidence, reasoning = self.search_client.validate_linkedin_profile(profile, candidate_data.model_dump())
+                    confidence, reasoning = self.linkedin_client.validate_profile(profile, candidate_data.model_dump())
                     if confidence >= options.min_confidence_score:
                         match = LinkedInProfileMatch(
                             profile=profile,
@@ -392,29 +439,47 @@ class DiscoveryService:
                             discovery_strategy=DiscoveryStrategy.DIRECT_URL
                         )
                         linkedin_profiles.append(match)
+                        seen_urls.add(profile_url)
                         self.logger.info("Direct LinkedIn URL validation successful", url=profile_url, confidence=confidence)
                 else:
                     self.logger.warning("LinkedIn profile not found for provided URL", url=profile_url)
-        
-        # Strategy 1: Search-based discovery (fallback)
+
+        # Strategy 1: Search-based discovery using Playwright
         if not candidate_info['name']:
             return linkedin_profiles
-        
-        self.logger.info("Performing search-based LinkedIn discovery", name=candidate_info['name'])
-        # Search for LinkedIn profiles
-        search_results = self.search_client.search_linkedin_profiles(
+
+        self.logger.info("Performing Playwright-based LinkedIn search", name=candidate_info['name'])
+
+        # Try Playwright-based Google search first
+        search_results = await self.linkedin_client.search_linkedin_profiles(
             name=candidate_info['name'],
             location=candidate_info['location'],
             company=candidate_info['companies'][0] if candidate_info['companies'] and len(candidate_info['companies']) > 0 else None
         )
-        
+
+        # If Playwright search fails or returns no results, fall back to SerpAPI
+        if not search_results:
+            self.logger.info("Playwright search returned no results, falling back to SerpAPI")
+            search_results = self.search_client.search_linkedin_profiles(
+                name=candidate_info['name'],
+                location=candidate_info['location'],
+                company=candidate_info['companies'][0] if candidate_info['companies'] and len(candidate_info['companies']) > 0 else None
+            )
+
         for result in search_results:
-            profile_url = result['profile_url']
-            
-            # Extract profile data
-            profile = self.search_client.extract_linkedin_profile_data(profile_url)
+            profile_url = result.get('profile_url', '')
+            if not profile_url or profile_url in seen_urls:
+                continue
+
+            # Extract profile data using Playwright for comprehensive scraping
+            profile = await self.linkedin_client.extract_profile_data(profile_url)
+
+            if not profile:
+                # Fallback to SerpAPI/requests for this specific profile
+                profile = self.search_client.extract_linkedin_profile_data(profile_url)
+
             if profile:
-                confidence, reasoning = self.search_client.validate_linkedin_profile(profile, candidate_data.model_dump())
+                confidence, reasoning = self.linkedin_client.validate_profile(profile, candidate_data.model_dump())
                 if confidence >= options.min_confidence_score:
                     match = LinkedInProfileMatch(
                         profile=profile,
@@ -423,7 +488,8 @@ class DiscoveryService:
                         discovery_strategy=DiscoveryStrategy.SEARCH_ENGINE
                     )
                     linkedin_profiles.append(match)
-        
+                    seen_urls.add(profile_url)
+
         # Sort by confidence and limit results
         linkedin_profiles.sort(key=lambda x: x.confidence, reverse=True)
         return linkedin_profiles[:options.max_linkedin_results]
@@ -472,8 +538,9 @@ class DiscoveryService:
         return health_status
     
     async def close(self) -> None:
-        """Close HTTP client connections."""
+        """Close HTTP client and browser connections."""
         await self.http_client.aclose()
+        await self.linkedin_client.close()
     
     def _extract_github_username(self, github_url: str) -> Optional[str]:
         """

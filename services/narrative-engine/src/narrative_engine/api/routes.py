@@ -9,7 +9,8 @@ from fastapi.responses import JSONResponse
 from ..core.config import settings
 from ..core.models import (
     NarrativeGenerationRequest, NarrativeGenerationResponse,
-    HealthCheckResponse, ServiceCapabilities, LLMProvider, NarrativeStyle
+    HealthCheckResponse, ServiceCapabilities, LLMProvider, NarrativeStyle,
+    BioNarrativeRequest, BioNarrativeResponse, EnrichedProfile
 )
 from ..services.narrative_service import narrative_service
 from ..services.llm_service import llm_service
@@ -30,9 +31,9 @@ async def generate_narrative(
     request_id: str = Depends(get_request_id)
 ):
     """Generate AI-powered candidate narrative."""
-    
+
     start_time = time.time()
-    
+
     # Log incoming request
     log_api_request(
         method=http_request.method,
@@ -40,19 +41,23 @@ async def generate_narrative(
         request_id=request_id,
         user_agent=http_request.headers.get("User-Agent")
     )
-    
+
     try:
-        # Fetch enriched profile from Data Enrichment Service
-        enriched_profile = await _fetch_enriched_profile(request.candidate_id)
-        
+        # Use provided enriched_profile or fetch from Data Enrichment Service
+        if request.enriched_profile:
+            enriched_profile = request.enriched_profile
+        else:
+            enriched_profile_data = await _fetch_enriched_profile(request.candidate_id)
+            enriched_profile = EnrichedProfile(**enriched_profile_data) if isinstance(enriched_profile_data, dict) else enriched_profile_data
+
         # Generate narrative
         narrative = await narrative_service.generate_narrative(
             request=request,
             enriched_profile=enriched_profile
         )
-        
+
         processing_time = (time.time() - start_time) * 1000
-        
+
         # Log successful response
         log_api_response(
             method=http_request.method,
@@ -61,17 +66,17 @@ async def generate_narrative(
             request_id=request_id,
             processing_time_ms=processing_time
         )
-        
+
         return NarrativeGenerationResponse(
             success=True,
             narrative=narrative,
             processing_time_ms=processing_time
         )
-        
+
     except httpx.HTTPStatusError as e:
         processing_time = (time.time() - start_time) * 1000
         error_msg = f"External service error: {e.response.status_code}"
-        
+
         log_error(
             "external_service_error",
             error_msg,
@@ -81,7 +86,7 @@ async def generate_narrative(
                 "processing_time_ms": processing_time
             }
         )
-        
+
         log_api_response(
             method=http_request.method,
             path=str(http_request.url.path),
@@ -89,16 +94,16 @@ async def generate_narrative(
             request_id=request_id,
             processing_time_ms=processing_time
         )
-        
+
         raise HTTPException(
             status_code=503,
             detail=f"Data Enrichment Service unavailable: {error_msg}"
         )
-        
+
     except Exception as e:
         processing_time = (time.time() - start_time) * 1000
         error_msg = f"Narrative generation failed: {str(e)}"
-        
+
         log_error(
             "narrative_generation_error",
             error_msg,
@@ -108,7 +113,7 @@ async def generate_narrative(
                 "processing_time_ms": processing_time
             }
         )
-        
+
         log_api_response(
             method=http_request.method,
             path=str(http_request.url.path),
@@ -116,8 +121,72 @@ async def generate_narrative(
             request_id=request_id,
             processing_time_ms=processing_time
         )
-        
+
         return NarrativeGenerationResponse(
+            success=False,
+            error_message=error_msg,
+            processing_time_ms=processing_time
+        )
+
+
+@router.post("/bio", response_model=BioNarrativeResponse)
+async def generate_bio_narrative(
+    request: BioNarrativeRequest,
+    http_request: Request,
+    request_id: str = Depends(get_request_id)
+):
+    """Generate a professional bio narrative for a candidate."""
+
+    start_time = time.time()
+
+    # Log incoming request
+    log_api_request(
+        method=http_request.method,
+        path=str(http_request.url.path),
+        request_id=request_id,
+        user_agent=http_request.headers.get("User-Agent")
+    )
+
+    try:
+        # Generate bio narrative
+        response = await narrative_service.generate_bio_narrative(request)
+
+        processing_time = (time.time() - start_time) * 1000
+
+        # Log response
+        log_api_response(
+            method=http_request.method,
+            path=str(http_request.url.path),
+            status_code=200 if response.success else 500,
+            request_id=request_id,
+            processing_time_ms=processing_time
+        )
+
+        return response
+
+    except Exception as e:
+        processing_time = (time.time() - start_time) * 1000
+        error_msg = f"Bio generation failed: {str(e)}"
+
+        log_error(
+            "bio_generation_error",
+            error_msg,
+            context={
+                "request_id": request_id,
+                "candidate_id": request.candidate_id,
+                "processing_time_ms": processing_time
+            }
+        )
+
+        log_api_response(
+            method=http_request.method,
+            path=str(http_request.url.path),
+            status_code=500,
+            request_id=request_id,
+            processing_time_ms=processing_time
+        )
+
+        return BioNarrativeResponse(
             success=False,
             error_message=error_msg,
             processing_time_ms=processing_time

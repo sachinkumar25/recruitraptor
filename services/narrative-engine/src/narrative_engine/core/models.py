@@ -96,13 +96,32 @@ class NarrativeGenerationRequest(BaseModel):
     llm_provider: Optional[LLMProvider] = Field(None, description="Preferred LLM provider")
     custom_prompts: Optional[Dict[str, str]] = Field(None, description="Custom prompts for sections")
     generation_parameters: Optional[Dict[str, Any]] = Field(None, description="Custom generation parameters")
-    
+    # Allow direct profile data to skip data-enrichment lookup
+    enriched_profile: Optional[EnrichedProfile] = Field(None, description="Pre-enriched profile data (optional)")
+
     @validator('narrative_style')
     def validate_narrative_style(cls, v):
         """Validate narrative style."""
         if v not in NarrativeStyle:
             raise ValueError(f"Unsupported narrative style: {v}")
         return v
+
+
+class BioNarrativeRequest(BaseModel):
+    """Request for generating a professional bio narrative."""
+    candidate_id: str = Field(..., description="Candidate identifier")
+    enriched_profile: EnrichedProfile = Field(..., description="Enriched profile data")
+    bio_style: str = Field("professional", description="Bio style: professional, casual, technical")
+    max_length: int = Field(500, description="Maximum bio length in words")
+    llm_provider: Optional[LLMProvider] = Field(None, description="Preferred LLM provider")
+
+
+class BioNarrativeResponse(BaseModel):
+    """Response containing generated bio narrative."""
+    success: bool = Field(..., description="Generation success status")
+    bio: Optional[str] = Field(None, description="Generated bio narrative")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    processing_time_ms: Optional[float] = Field(None, description="Processing time in milliseconds")
 
 
 class NarrativeGenerationResponse(BaseModel):

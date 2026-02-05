@@ -106,6 +106,10 @@ class LinkedInProfile(BaseModel):
     summary: Optional[str] = None
     experience_count: Optional[int] = None
     education_count: Optional[int] = None
+    # Extended fields from Playwright scraper
+    skills: Optional[List[str]] = Field(default=None, description="Skills extracted from profile")
+    education: Optional[List[Dict[str, str]]] = Field(default=None, description="Education entries")
+    experience_positions: Optional[List[Dict[str, Any]]] = Field(default=None, description="Work experience positions")
 
 
 class LinkedInProfileMatch(BaseModel):

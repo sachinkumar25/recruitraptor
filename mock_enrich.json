@@ -1,0 +1,59 @@
+{
+    "resume_data": {
+        "personal_info": {
+            "name": {
+                "value": "Test Candidate",
+                "confidence": 0.9
+            },
+            "email": {
+                "value": "test@example.com",
+                "confidence": 0.95
+            },
+            "phone": {
+                "value": "123-456-7890",
+                "confidence": 0.8
+            },
+            "location": {
+                "value": "Test City",
+                "confidence": 0.8
+            },
+            "linkedin_url": {
+                "value": "linkedin.com/in/test",
+                "confidence": 0.9
+            },
+            "github_url": {
+                "value": "github.com/test",
+                "confidence": 0.9
+            },
+            "confidence": 0.9
+        },
+        "skills": {
+            "languages": [
+                "Python",
+                "JavaScript"
+            ]
+        },
+        "education": {},
+        "experience": {},
+        "metadata": {}
+    },
+    "github_profiles": [
+        {
+            "profile": {
+                "username": "testuser",
+                "profile_url": "https://github.com/testuser"
+            },
+            "confidence": 0.95,
+            "match_reasoning": "Exact match"
+        }
+    ],
+    "linkedin_profiles": [],
+    "job_context": {
+        "required_skills": [
+            "Python"
+        ],
+        "preferred_skills": [
+            "JavaScript"
+        ]
+    }
+}

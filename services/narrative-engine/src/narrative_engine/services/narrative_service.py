@@ -8,7 +8,8 @@ from datetime import datetime
 from ..core.config import settings
 from ..core.models import (
     EnrichedProfile, JobRequirement, NarrativeStyle, LLMProvider,
-    GeneratedNarrative, NarrativeSection, NarrativeGenerationRequest
+    GeneratedNarrative, NarrativeSection, NarrativeGenerationRequest,
+    BioNarrativeRequest, BioNarrativeResponse
 )
 from ..services.llm_service import llm_service
 from ..utils.logger import service_logger, log_narrative_generation, log_error
@@ -355,6 +356,134 @@ GitHub Analysis:
         else:
             return "Consider for future opportunities or different roles."
     
+    async def generate_bio_narrative(
+        self,
+        request: BioNarrativeRequest
+    ) -> BioNarrativeResponse:
+        """Generate a professional bio narrative for a candidate."""
+
+        start_time = time.time()
+
+        try:
+            profile = request.enriched_profile
+
+            # Build bio-specific prompt
+            prompt = self._build_bio_prompt(
+                profile=profile,
+                bio_style=request.bio_style,
+                max_length=request.max_length
+            )
+
+            # Generate bio with LLM
+            llm_response = llm_service.generate_narrative(
+                prompt=prompt,
+                provider=request.llm_provider or LLMProvider(settings.default_llm_provider),
+                model=settings.default_model,
+                max_tokens=min(request.max_length * 2, settings.max_tokens),
+                temperature=0.7
+            )
+
+            processing_time = (time.time() - start_time) * 1000
+
+            log_narrative_generation(
+                candidate_id=request.candidate_id,
+                narrative_style=f"bio_{request.bio_style}",
+                llm_provider=llm_response["provider"].value,
+                model=llm_response["model"],
+                processing_time_ms=processing_time,
+                success=True
+            )
+
+            return BioNarrativeResponse(
+                success=True,
+                bio=llm_response["content"].strip(),
+                processing_time_ms=processing_time
+            )
+
+        except Exception as e:
+            processing_time = (time.time() - start_time) * 1000
+            log_error(
+                "bio_narrative_generation_failed",
+                str(e),
+                context={
+                    "candidate_id": request.candidate_id,
+                    "bio_style": request.bio_style,
+                    "processing_time_ms": processing_time
+                }
+            )
+            return BioNarrativeResponse(
+                success=False,
+                error_message=str(e),
+                processing_time_ms=processing_time
+            )
+
+    def _build_bio_prompt(
+        self,
+        profile: EnrichedProfile,
+        bio_style: str,
+        max_length: int
+    ) -> str:
+        """Build prompt for bio narrative generation."""
+
+        style_instructions = {
+            "professional": "Write a formal, professional bio suitable for LinkedIn or a company website. Focus on achievements, expertise, and career trajectory.",
+            "casual": "Write a friendly, approachable bio suitable for team introductions or personal websites. Keep it warm and personable while highlighting key skills.",
+            "technical": "Write a detailed technical bio suitable for engineering blogs or technical conferences. Emphasize technical skills, projects, and problem-solving abilities."
+        }
+
+        style_instruction = style_instructions.get(bio_style, style_instructions["professional"])
+
+        # Build skills summary
+        skills_text = ""
+        if profile.programming_languages:
+            skills_text += f"Programming Languages: {', '.join(profile.programming_languages[:5])}\n"
+        if profile.frameworks:
+            skills_text += f"Frameworks: {', '.join(profile.frameworks[:5])}\n"
+        if profile.technical_skills:
+            skill_names = [s.get('name', '') if isinstance(s, dict) else str(s) for s in profile.technical_skills[:10]]
+            skills_text += f"Technical Skills: {', '.join(skill_names)}\n"
+
+        # Build GitHub summary
+        github_text = ""
+        if profile.github_analysis:
+            github = profile.github_analysis
+            github_text = f"""
+GitHub Activity:
+- Repositories: {github.get('total_repositories', 'N/A')}
+- Languages: {', '.join(github.get('languages', [])[:5]) if github.get('languages') else 'N/A'}
+- Recent Activity Score: {github.get('recent_activity_score', 'N/A')}
+"""
+
+        prompt = f"""You are a professional bio writer. {style_instruction}
+
+Generate a compelling bio narrative (maximum {max_length} words) for the following candidate:
+
+CANDIDATE PROFILE:
+Name: {profile.name}
+Location: {profile.location or 'Not specified'}
+Years of Experience: {profile.experience_years or 'Not specified'}
+
+SKILLS AND EXPERTISE:
+{skills_text if skills_text else 'Skills not specified'}
+
+{github_text if github_text else ''}
+
+STRENGTHS:
+{', '.join(profile.skill_strengths) if profile.skill_strengths else 'Not specified'}
+
+INSTRUCTIONS:
+1. Write in third person
+2. Start with an engaging hook about the candidate
+3. Highlight their key technical expertise
+4. Mention notable projects or achievements if available from GitHub
+5. End with their professional interests or what they bring to a team
+6. Keep it under {max_length} words
+7. Do not include placeholder text or ask for more information
+
+Write the bio now:"""
+
+        return prompt
+
     async def close(self):
         """Close HTTP client."""
         await self.http_client.aclose()

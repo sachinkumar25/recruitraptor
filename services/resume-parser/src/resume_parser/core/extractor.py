@@ -22,6 +22,13 @@ class TextExtractor:
         'docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         'txt': ['text/plain']
     }
+
+    # Magic Bytes (Hex signatures)
+    MAGIC_BYTES = {
+        'pdf': [b'%PDF-'],
+        'docx': [b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'], # Zip file signatures
+        'txt': [] # No reliable magic bytes for TXT
+    }
     
     # Maximum file size (5MB)
     MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -61,6 +68,10 @@ class TextExtractor:
         # Validate minimum content
         if len(file_content) == 0:
             raise ValueError("File is empty")
+
+        # Validate Magic Bytes (Security Hardening)
+        if not self._validate_magic_bytes(file_content, file_type):
+             raise ValueError(f"Invalid file signature (magic bytes) for {file_type}")
         
         metadata = {
             'file_type': file_type.lower(),
@@ -131,11 +142,25 @@ class TextExtractor:
                 raise RuntimeError("Password-protected PDFs are not supported")
             
             text_parts = []
+            
+            def visitor_body(text, cm, tm, font_dict, font_size):
+                """Visitor for body text extraction (better layout handling)."""
+                input_text = text if text else ""
+                if input_text.strip():
+                    text_parts.append(input_text)
+
             for page_num, page in enumerate(pdf_reader.pages):
                 try:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(page_text)
+                    # Use visitor to extract text in reading order if possible
+                    # This approximates simple column handling
+                    page.extract_text(visitor_text=visitor_body)
+                    
+                    # Fallback if visitor yielded nothing (e.g. image-based or weird font map)
+                    if not text_parts: 
+                         page_text = page.extract_text()
+                         if page_text:
+                            text_parts.append(page_text)
+                            
                 except Exception as e:
                     self.logger.warning("Failed to extract text from page", 
                                       page_num=page_num, 
@@ -269,6 +294,30 @@ class TextExtractor:
         """
         return file_type.lower() in self.SUPPORTED_TYPES
     
+    def _validate_magic_bytes(self, content: bytes, file_type: str) -> bool:
+        """
+        Validate file content against expected magic bytes.
+        
+        Args:
+            content: File content bytes
+            file_type: File extension
+            
+        Returns:
+            True if valid or no magic bytes defined, False otherwise
+        """
+        file_type = file_type.lower()
+        if file_type not in self.MAGIC_BYTES or not self.MAGIC_BYTES[file_type]:
+            return True # No magic bytes to check for this type (e.g. txt)
+            
+        for magic in self.MAGIC_BYTES[file_type]:
+            if content.startswith(magic):
+                return True
+                
+        self.logger.warning("Magic bytes mismatch", 
+                          file_type=file_type, 
+                          header=content[:10].hex())
+        return False
+
     def get_supported_types(self) -> Dict[str, list]:
         """
         Get supported file types and their MIME types.

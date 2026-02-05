@@ -10,6 +10,47 @@ from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+class RegexOverlay:
+    """Applies strict regex patterns to override or enhance NLP-extracted fields."""
+    
+    @staticmethod
+    def apply_overlays(extracted_data: Dict[str, Any], text: str) -> Dict[str, Any]:
+        """Apply regex overlays to critical fields."""
+        
+        # Overlay 1: Strict Email Extraction
+        # NLP sometimes mistakes emails for names or orgs, or misses them. 
+        # We enforce a strict regex scan.
+        email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+        emails = email_pattern.findall(text)
+        if emails:
+            # Take the first valid-looking email if current is missing or low confidence
+            current_email = extracted_data.get('personal_info', {}).get('email', {}).get('value')
+            current_conf = extracted_data.get('personal_info', {}).get('email', {}).get('confidence', 0)
+            
+            if not current_email or current_conf < 0.99:
+                # Prefer the regex match
+                if 'personal_info' not in extracted_data:
+                    extracted_data['personal_info'] = {}
+                extracted_data['personal_info']['email'] = {
+                    'value': emails[0],
+                    'confidence': 1.0, # High confidence for strict regex
+                    'source': 'regex_overlay'
+                }
+        
+        # Overlay 2: Strict LinkedIn URL
+        linkedin_pattern = re.compile(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[a-zA-Z0-9-]+/?', re.IGNORECASE)
+        linkedins = linkedin_pattern.findall(text)
+        if linkedins:
+             current_li = extracted_data.get('personal_info', {}).get('linkedin_url', {}).get('value')
+             if not current_li:
+                  extracted_data['personal_info']['linkedin_url'] = {
+                      'value': linkedins[0],
+                      'confidence': 1.0,
+                      'source': 'regex_overlay'
+                  }
+
+        return extracted_data
+
 class ResumeParser:
     """Extracts structured data from resume text using NLP and pattern matching."""
     
@@ -105,6 +146,10 @@ class ResumeParser:
                 'extraction_errors': []
             }
         }
+        
+        # Apply Regex Overlays (Level 4 Requirement)
+        # Verify and override fields with strict regex if needed
+        result = RegexOverlay.apply_overlays(result, text)
         
         # Calculate overall confidence
         confidences = []

@@ -48,10 +48,12 @@ class Settings(BaseSettings):
     
     # CORS Configuration
     cors_origins: List[str] = [
-        "http://localhost:3000",  # Frontend
+        "http://localhost:3000",  # Frontend (Next.js)
+        "http://localhost:3001",  # Frontend (alternate port)
         "http://localhost:8000",  # Resume Parser
         "http://localhost:8001",  # Profile Discovery
         "http://localhost:8002",  # Data Enrichment
+        "*",  # Allow all origins for development
     ]
     
     class Config:

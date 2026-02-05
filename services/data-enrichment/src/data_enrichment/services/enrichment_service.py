@@ -19,12 +19,17 @@ from ..core.models import (
 from ..core.data_integrator import DataIntegrator
 from ..core.skill_analyzer import SkillAnalyzer
 from ..core.conflict_resolver import ConflictResolver
+from ..core.analyzers import GapAnalyzer, SkillVerifier
 from ..core.config import settings
 from ..utils.logger import EnrichmentLogger, logger
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from ..core.models_sql import CandidateProfile
 
 
 class EnrichmentService:
     """Main service for enriching candidate data."""
+    
     
     def __init__(self):
         """Initialize the enrichment service."""
@@ -35,7 +40,8 @@ class EnrichmentService:
     
     async def enrich_candidate_data(
         self,
-        request: EnrichmentRequest
+        request: EnrichmentRequest,
+        db: AsyncSession
     ) -> EnrichmentResponse:
         """Enrich candidate data by combining and analyzing multiple sources."""
         
@@ -56,12 +62,39 @@ class EnrichmentService:
             # Step 2: Integrate data from multiple sources
             enriched_profile = await self._integrate_candidate_data(request)
             
+            # Step 2.5: Analyze Experience Gaps (Level 4 Requirement)
+            # Check for timeline gaps > 90 days
+            exp_data = {"dates": enriched_profile.experience.dates}
+            gaps = GapAnalyzer.detect_gaps(exp_data)
+            if gaps:
+                gap_summary = "; ".join([f"{g['start']} to {g['end']} ({g['duration_days']} days)" for g in gaps])
+                # Store in impact_metrics or a dedicated field if model supported it.
+                # Using impact_metrics["timeline_issues"] for visibility.
+                if not enriched_profile.experience.impact_metrics:
+                    enriched_profile.experience.impact_metrics = {}
+                enriched_profile.experience.impact_metrics["timeline_issues"] = f"Gaps detected: {gap_summary}"
+                enrichment_logger.log_info(f"Timeline gaps detected: {gap_summary}")
+            
             # Step 3: Perform advanced skill analysis
             enriched_profile = await self._analyze_skills(enriched_profile, request)
             
             # Step 4: Calculate job relevance if job context is provided
             if request.job_context:
                 enriched_profile = await self._calculate_job_relevance(enriched_profile, request.job_context)
+            
+            # Store profile in memory
+            # Store profile in database
+            db_record = CandidateProfile(
+                candidate_id=enriched_profile.candidate_id,
+                name=enriched_profile.personal_info.name,
+                email=enriched_profile.personal_info.email,
+                profile_data=enriched_profile.model_dump(mode='json'),
+                overall_confidence=enriched_profile.overall_confidence,
+                job_relevance_score=enriched_profile.job_relevance_score
+            )
+            db.add(db_record)
+            await db.commit()
+            await db.refresh(db_record)
             
             # Step 5: Calculate processing time
             processing_time_ms = (time.time() - start_time) * 1000
@@ -103,6 +136,20 @@ class EnrichmentService:
                 error_message=str(e)
             )
     
+    async def get_profile(self, candidate_id: str, db: AsyncSession) -> Optional[EnrichedCandidateProfile]:
+        """Retrieve a stored profile by ID."""
+        result = await db.execute(select(CandidateProfile).where(CandidateProfile.candidate_id == candidate_id))
+        record = result.scalars().first()
+        if record:
+             return EnrichedCandidateProfile(**record.profile_data)
+        return None
+
+    async def get_all_profiles(self, db: AsyncSession) -> List[EnrichedCandidateProfile]:
+        """Retrieve all stored profiles."""
+        result = await db.execute(select(CandidateProfile).order_by(CandidateProfile.created_at.desc()))
+        records = result.scalars().all()
+        return [EnrichedCandidateProfile(**r.profile_data) for r in records]
+
     async def _resolve_data_conflicts(self, request: EnrichmentRequest) -> List[ConflictResolutionResult]:
         """Resolve conflicts between data from different sources."""
         
@@ -183,6 +230,16 @@ class EnrichmentService:
         
         # Update the enriched profile with skill analysis
         enriched_profile.skills.technical_skills = skill_proficiencies
+        
+        # Skill Verification via GitHub (Level 4 Requirement)
+        if enriched_profile.github_analysis:
+             for skill in enriched_profile.skills.technical_skills:
+                 verification = SkillVerifier.verify_skill_with_github(skill.skill_name, enriched_profile.github_analysis)
+                 if verification['verified']:
+                     if DataSource.GITHUB not in skill.evidence_sources:
+                         skill.evidence_sources.append(DataSource.GITHUB)
+                     # Boost confidence if verified by code
+                     skill.confidence_score = min(1.0, skill.confidence_score + 0.15)
         
         # Categorize skills
         all_skills = [skill.skill_name for skill in skill_proficiencies]
@@ -279,14 +336,18 @@ class EnrichmentService:
             algorithms_used=[]
         )
     
-    async def get_enrichment_statistics(self) -> Dict[str, Any]:
+    async def get_enrichment_statistics(self, db: AsyncSession) -> Dict[str, Any]:
         """Get enrichment service statistics."""
         
+        # Count total profiles
+        result = await db.execute(select(func.count(CandidateProfile.candidate_id)))
+        total_count = result.scalar() or 0
+
         return {
             "service_name": settings.service_name,
             "version": settings.version,
             "uptime_seconds": 0,  # Would be calculated from service start time
-            "total_enrichments": 0,  # Would be tracked in a real implementation
+            "total_enrichments": total_count,
             "average_processing_time_ms": 0,  # Would be calculated from historical data
             "success_rate": 1.0,  # Would be calculated from historical data
             "active_data_sources": [
