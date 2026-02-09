@@ -7,6 +7,7 @@ from datetime import datetime
 import structlog
 
 from ..utils.logger import get_logger
+from ..utils.education_filters import is_educational_institution, SKILL_KEYWORDS
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,32 @@ class RegexOverlay:
 
 class ResumeParser:
     """Extracts structured data from resume text using NLP and pattern matching."""
-    
+
+    # Section heading patterns for detecting resume sections
+    SECTION_HEADINGS = {
+        'experience': [
+            r'(?:work\s+)?experience', r'employment(?:\s+history)?', r'professional\s+experience',
+            r'work\s+history', r'career\s+history', r'relevant\s+experience',
+        ],
+        'education': [
+            r'education', r'academic(?:\s+background)?', r'qualifications',
+            r'academic\s+history', r'educational\s+background',
+        ],
+        'skills': [
+            r'(?:technical\s+)?skills', r'competencies', r'technologies',
+            r'proficiencies', r'areas\s+of\s+expertise', r'tools?\s*(?:&|and)\s*technologies',
+        ],
+        'projects': [
+            r'projects', r'personal\s+projects', r'portfolio',
+        ],
+        'certifications': [
+            r'certifications?', r'licenses?\s*(?:&|and)\s*certifications?',
+        ],
+        'summary': [
+            r'(?:professional\s+)?summary', r'objective', r'profile', r'about(?:\s+me)?',
+        ],
+    }
+
     def __init__(self):
         """Initialize the ResumeParser with spaCy model."""
         self.logger = logger
@@ -64,9 +90,19 @@ class ResumeParser:
         except OSError:
             self.logger.error("spaCy model 'en_core_web_sm' not found. Please install with: python -m spacy download en_core_web_sm")
             raise RuntimeError("spaCy model not available")
-        
+
         # Initialize patterns
         self._init_patterns()
+
+        # Build compiled section heading pattern
+        all_headings = []
+        for headings in self.SECTION_HEADINGS.values():
+            all_headings.extend(headings)
+        heading_alts = '|'.join(all_headings)
+        self._section_pattern = re.compile(
+            rf'(?:^|\n)\s*(?:#{1,3}\s+)?(?P<heading>{heading_alts})\s*[:\-]?\s*(?:\n|$)',
+            re.IGNORECASE | re.MULTILINE
+        )
     
     def _init_patterns(self):
         """Initialize regex patterns for field extraction."""
@@ -115,26 +151,85 @@ class ResumeParser:
             re.compile(r'\b(?:Machine Learning|AI|Deep Learning|TensorFlow|PyTorch|Scikit-learn|Pandas|NumPy)\b', re.IGNORECASE)
         ]
     
+    def _detect_sections(self, text: str) -> Dict[str, str]:
+        """
+        Detect section boundaries in resume text and return section-specific text.
+
+        Returns a dict mapping section names ('experience', 'education', 'skills', etc.)
+        to the text content of that section. Unmatched text is put in 'header' (before
+        the first section) or left in the last matched section.
+        """
+        matches = []
+        for section_name, patterns in self.SECTION_HEADINGS.items():
+            for pattern in patterns:
+                regex = re.compile(
+                    rf'(?:^|\n)\s*(?:#{{{1,3}}}\s+)?({pattern})\s*[:\-]?\s*(?:\n|$)',
+                    re.IGNORECASE | re.MULTILINE
+                )
+                for m in regex.finditer(text):
+                    matches.append((m.start(), m.end(), section_name))
+
+        if not matches:
+            # No sections detected — return full text as all sections
+            return {
+                'experience': text,
+                'education': text,
+                'skills': text,
+                'header': text,
+            }
+
+        # Sort by position in text
+        matches.sort(key=lambda x: x[0])
+
+        sections: Dict[str, str] = {}
+
+        # Text before the first section heading is the header (name, contact info)
+        if matches[0][0] > 0:
+            sections['header'] = text[:matches[0][0]]
+
+        for i, (start, content_start, section_name) in enumerate(matches):
+            # Section content runs from the end of the heading to the start of the next heading
+            if i + 1 < len(matches):
+                section_text = text[content_start:matches[i + 1][0]]
+            else:
+                section_text = text[content_start:]
+
+            # If same section appears twice, concatenate
+            if section_name in sections:
+                sections[section_name] += '\n' + section_text
+            else:
+                sections[section_name] = section_text
+
+        self.logger.debug("Detected resume sections", sections=list(sections.keys()))
+        return sections
+
     def parse(self, text: str) -> Dict[str, Any]:
         """
         Parse resume text and extract structured data.
-        
+
         Args:
             text: Clean resume text
-            
+
         Returns:
             Dictionary containing extracted fields with confidence scores
         """
         self.logger.info("Starting resume parsing", text_length=len(text))
-        
+
         # Process text with spaCy
         doc = self.nlp(text)
-        
+
+        # Detect resume sections for targeted extraction
+        sections = self._detect_sections(text)
+
+        # Extract education first so we can filter education entities from experience
+        education_result = self._extract_education(doc, text, sections)
+        education_institutions = set(inst.lower() for inst in education_result.get('institutions', []))
+
         # Extract different sections
         result = {
             'personal_info': self._extract_personal_info(doc, text),
-            'education': self._extract_education(doc, text),
-            'experience': self._extract_experience(doc, text),
+            'education': education_result,
+            'experience': self._extract_experience(doc, text, sections, education_institutions),
             'skills': self._extract_skills(doc, text),
             'metadata': {
                 'total_words': len(doc),
@@ -230,8 +325,9 @@ class ResumeParser:
         
         return personal_info
     
-    def _extract_education(self, doc: spacy.tokens.Doc, text: str) -> Dict[str, Any]:
-        """Extract education information from resume text."""
+    def _extract_education(self, doc: spacy.tokens.Doc, text: str,
+                            sections: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """Extract education information from the education section of the resume."""
         education = {
             'institutions': [],
             'degrees': [],
@@ -240,49 +336,70 @@ class ResumeParser:
             'gpa': {'value': None, 'confidence': 0.0},
             'confidence': 0.0
         }
-        
-        # Extract GPA
-        gpa_match = self.gpa_pattern.search(text)
+
+        # Use the education section text if available, otherwise full text
+        edu_text = (sections or {}).get('education', text)
+        edu_doc = self.nlp(edu_text)
+
+        # Extract GPA from education section
+        gpa_match = self.gpa_pattern.search(edu_text)
         if gpa_match:
             education['gpa']['value'] = float(gpa_match.group(1))
             education['gpa']['confidence'] = 0.9
-        
-        # Extract education entities
+
+        # Extract education entities from education section only
         education_keywords = ['university', 'college', 'school', 'institute', 'academy']
         education_entities = []
-        
-        for ent in doc.ents:
+
+        for ent in edu_doc.ents:
             if ent.label_ == "ORG":
-                # Check if it's likely an educational institution
                 for keyword in education_keywords:
                     if keyword.lower() in ent.text.lower():
                         education_entities.append(ent.text)
                         break
-        
+
         education['institutions'] = education_entities
-        
-        # Extract dates (likely graduation dates)
+
+        # Extract degree patterns
+        degree_patterns = [
+            re.compile(r'\b(?:Bachelor|Master|Doctor|Ph\.?D\.?|B\.?S\.?|M\.?S\.?|B\.?A\.?|M\.?A\.?|M\.?B\.?A\.?|Associate)\s*(?:of\s+)?(?:Science|Arts|Engineering|Business|Administration|Computer Science|Information Technology)?\b', re.IGNORECASE),
+        ]
+        for pattern in degree_patterns:
+            matches = pattern.findall(edu_text)
+            education['degrees'].extend(matches)
+
+        # Extract fields of study
+        field_patterns = [
+            re.compile(r'\b(?:Computer Science|Information Technology|Software Engineering|Data Science|Mathematics|Statistics|Electrical Engineering|Mechanical Engineering|Physics|Chemistry|Biology|Economics|Business Administration)\b', re.IGNORECASE),
+        ]
+        for pattern in field_patterns:
+            matches = pattern.findall(edu_text)
+            education['fields_of_study'].extend(matches)
+
+        # Extract dates from education section only
         dates = []
         for pattern in self.date_patterns:
-            matches = pattern.findall(text)
+            matches = pattern.findall(edu_text)
             dates.extend(matches)
-        
-        education['dates'] = dates[:3]  # Limit to first 3 dates
-        
+
+        education['dates'] = dates[:3]
+
         # Calculate section confidence
         confidences = [education['gpa']['confidence']]
         if education['institutions']:
             confidences.append(0.7)
         if education['dates']:
             confidences.append(0.6)
-        
+
         if confidences:
             education['confidence'] = sum(confidences) / len(confidences)
-        
+
         return education
     
-    def _extract_experience(self, doc: spacy.tokens.Doc, text: str) -> Dict[str, Any]:
-        """Extract work experience information from resume text."""
+    def _extract_experience(self, doc: spacy.tokens.Doc, text: str,
+                             sections: Optional[Dict[str, str]] = None,
+                             education_institutions: Optional[set] = None) -> Dict[str, Any]:
+        """Extract work experience information from the experience section of the resume."""
         experience = {
             'companies': [],
             'positions': [],
@@ -290,36 +407,91 @@ class ResumeParser:
             'descriptions': [],
             'confidence': 0.0
         }
-        
-        # Extract company names (organizations)
+
+        # Use the experience section text if available, otherwise full text
+        exp_text = (sections or {}).get('experience', text)
+        exp_doc = self.nlp(exp_text)
+
+        education_set = education_institutions or set()
+
+        # Extract company names — only ORG entities from the experience section,
+        # filtering out education institutions and known skills/tools
         companies = []
-        for ent in doc.ents:
-            if ent.label_ == "ORG" and ent.text not in experience['companies']:
-                companies.append(ent.text)
-        
-        experience['companies'] = companies[:5]  # Limit to first 5 companies
-        
-        # Extract job titles (common patterns)
+        for ent in exp_doc.ents:
+            if ent.label_ != "ORG":
+                continue
+            name = ent.text.strip()
+            name_lower = name.lower()
+
+            self.logger.debug(f"Checking potential company: '{name}'")
+
+            # Skip if it looks like an educational institution
+            if is_educational_institution(name):
+                self.logger.debug(f"Filtered educational institution from companies: {name}")
+                continue
+            # Skip if it matches a known education institution from the education section
+            if name_lower in education_set:
+                self.logger.debug(f"Filtered out by education set match: {name}")
+                continue
+            # Skip if it's a known skill/tool (exact match or contained in name)
+            if any(kw in name_lower for kw in SKILL_KEYWORDS):
+                self.logger.debug(f"Filtered out by skill keyword: {name}")
+                continue
+            # Skip very short names (likely noise)
+            if len(name) < 2:
+                continue
+
+            if name not in companies:
+                companies.append(name)
+
+        experience['companies'] = companies[:5]
+
+        # Extract job titles — only from experience section text
         job_title_patterns = [
-            r'\b(?:Software Engineer|Developer|Programmer|Architect|Manager|Lead|Senior|Junior|Full Stack|Frontend|Backend|DevOps|Data Scientist|ML Engineer)\b',
-            r'\b(?:Engineer|Developer|Analyst|Consultant|Specialist|Coordinator|Assistant|Director|VP|CTO|CEO)\b'
+            r'\b(?:Senior\s+)?(?:Software\s+Engineer|Developer|Programmer|Architect|Engineering\s+Manager|Technical\s+Lead|Team\s+Lead|Full\s+Stack\s+Developer|Frontend\s+Developer|Backend\s+Developer|DevOps\s+Engineer|Data\s+Scientist|ML\s+Engineer|Data\s+Engineer|Site\s+Reliability\s+Engineer|Product\s+Manager|Program\s+Manager|Staff\s+Engineer|Principal\s+Engineer)\b',
+            r'\b(?:Junior\s+)?(?:Software\s+Engineer|Developer|Analyst|Consultant|Specialist|Coordinator|Director|VP|CTO|CEO|CIO|COO)\b',
+            r'\b(?:Engineering\s+)?Intern\b',
         ]
-        
+
         positions = []
         for pattern in job_title_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            positions.extend(matches)
-        
-        experience['positions'] = list(set(positions))[:5]  # Remove duplicates, limit to 5
-        
-        # Extract dates
+            matches = re.findall(pattern, exp_text, re.IGNORECASE)
+            for m in matches:
+                m_stripped = m.strip()
+                if m_stripped and m_stripped not in positions:
+                    positions.append(m_stripped)
+
+        experience['positions'] = positions[:5]
+
+        # Extract dates — only from experience section text
         dates = []
-        for pattern in self.date_patterns:
-            matches = pattern.findall(text)
-            dates.extend(matches)
-        
-        experience['dates'] = dates[:6]  # Limit to first 6 dates
-        
+        # Also look for date ranges like "Jan 2020 - Present"
+        date_range_pattern = re.compile(
+            r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s*[-–—]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|Present|Current|Now)\b',
+            re.IGNORECASE
+        )
+        range_matches = date_range_pattern.findall(exp_text)
+        dates.extend(range_matches)
+
+        # If no ranges found, fall back to individual dates
+        if not dates:
+            for pattern in self.date_patterns:
+                matches = pattern.findall(exp_text)
+                dates.extend(matches)
+
+        experience['dates'] = dates[:6]
+
+        # Try to build aligned entries by scanning the experience section for
+        # blocks that contain a position, a company, and dates together.
+        # This is a best-effort heuristic to improve index alignment.
+        if experience['positions'] and experience['companies']:
+            aligned = self._align_experience_entries(exp_text, experience)
+            if aligned:
+                experience['companies'] = [e['company'] for e in aligned]
+                experience['positions'] = [e['position'] for e in aligned]
+                experience['dates'] = [e['dates'] for e in aligned]
+                experience['descriptions'] = [e['description'] for e in aligned]
+
         # Calculate section confidence
         confidences = []
         if experience['companies']:
@@ -328,11 +500,78 @@ class ResumeParser:
             confidences.append(0.6)
         if experience['dates']:
             confidences.append(0.5)
-        
+
         if confidences:
             experience['confidence'] = sum(confidences) / len(confidences)
-        
+
         return experience
+
+    def _align_experience_entries(self, exp_text: str, experience: Dict[str, Any]) -> Optional[List[Dict[str, str]]]:
+        """
+        Try to align companies, positions, and dates by finding them in proximity
+        within the experience section text. Splits text into blocks separated by
+        double newlines or date-range lines and matches entities within each block.
+        """
+        # Split experience text into blocks (each block ~= one job entry)
+        # Blocks are separated by blank lines or lines that look like new entries
+        blocks = re.split(r'\n\s*\n', exp_text.strip())
+        if len(blocks) <= 1:
+            # Try splitting by date ranges as separators
+            date_range = re.compile(
+                r'(?=\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s*[-–—])',
+                re.IGNORECASE
+            )
+            blocks = date_range.split(exp_text.strip())
+            blocks = [b.strip() for b in blocks if b.strip()]
+
+        if len(blocks) <= 1:
+            return None  # Can't split into meaningful blocks
+
+        companies = experience['companies']
+        positions = experience['positions']
+        entries = []
+
+        for block in blocks:
+            block_lower = block.lower()
+
+            # Find which company appears in this block
+            matched_company = None
+            for company in companies:
+                if company.lower() in block_lower:
+                    matched_company = company
+                    break
+
+            # Find which position appears in this block
+            matched_position = None
+            for position in positions:
+                if position.lower() in block_lower:
+                    matched_position = position
+                    break
+
+            if not matched_company and not matched_position:
+                continue
+
+            # Find dates in this block
+            block_dates = []
+            date_range_pattern = re.compile(
+                r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\s*[-–—]\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|Present|Current|Now)\b',
+                re.IGNORECASE
+            )
+            range_matches = date_range_pattern.findall(block)
+            if range_matches:
+                block_dates = range_matches
+            else:
+                for pattern in self.date_patterns:
+                    block_dates.extend(pattern.findall(block))
+
+            entries.append({
+                'company': matched_company or 'Unknown',
+                'position': matched_position or 'Role',
+                'dates': block_dates[0] if block_dates else 'Dates unknown',
+                'description': block.strip()[:500],  # First 500 chars as description
+            })
+
+        return entries if entries else None
     
     def _extract_skills(self, doc: spacy.tokens.Doc, text: str) -> Dict[str, Any]:
         """Extract skills from resume text."""
