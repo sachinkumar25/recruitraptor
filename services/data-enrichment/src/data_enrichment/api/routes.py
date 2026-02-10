@@ -53,7 +53,7 @@ async def enrich_candidate_data(
         if validation_errors:
             error_response = create_error_response(
                 error_type="validation_error",
-                message="Request validation failed",
+                message=f"Request validation failed: {'; '.join(validation_errors)}",
                 request_id=str(http_request.url)
             )
             api_logger.log_error(

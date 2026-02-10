@@ -372,9 +372,11 @@ class EnrichmentService:
         if not request.resume_data:
             errors.append("Resume data is required")
         
+        
         # Check if at least one profile source is provided
-        if not request.github_profiles and not request.linkedin_profiles:
-            errors.append("At least one profile source (GitHub or LinkedIn) is required")
+        # Relaxed check: Allow enrichment with just resume data
+        # if not request.github_profiles and not request.linkedin_profiles:
+        #     errors.append("At least one profile source (GitHub or LinkedIn) is required")
         
         # Validate resume data structure
         if request.resume_data:

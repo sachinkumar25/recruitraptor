@@ -65,7 +65,10 @@ export function Sidebar() {
                 <div className="flex items-center gap-3">
                     {/* Animated Logo */}
                     <div className="relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl blur-lg opacity-50 animate-pulse-glow" />
+                        <div
+                            suppressHydrationWarning
+                            className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl blur-lg opacity-50 animate-pulse-glow"
+                        />
                         <div className="relative h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
                             <Sparkles className="h-5 w-5 text-white" />
                         </div>

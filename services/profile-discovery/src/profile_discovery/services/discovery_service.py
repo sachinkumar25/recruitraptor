@@ -2,6 +2,7 @@
 
 import time
 import json
+import re
 from typing import Dict, List, Optional, Any
 import redis
 import httpx
@@ -11,7 +12,8 @@ from ..core.config import settings
 from ..core.models import (
     DiscoveryRequest, DiscoveryResponse, DiscoveryMetadata,
     GitHubProfileMatch, LinkedInProfileMatch, DiscoveryStrategy,
-    ExtractedResumeData, DiscoveryOptions
+    ExtractedResumeData, DiscoveryOptions,
+    GitHubProfile, LinkedInProfile
 )
 from ..clients.github_client import GitHubClient
 from ..clients.search_client import SearchClient
@@ -136,28 +138,39 @@ class DiscoveryService:
             candidate_info = self._extract_candidate_info(candidate_data)
             
             # Discover GitHub profiles
+            # Discover GitHub profiles
             if options.search_github:
                 github_start = time.time()
-                github_profiles = await self._discover_github_profiles(candidate_info, options, candidate_data)
-                metadata.github_search_time_ms = (time.time() - github_start) * 1000
-                # Add strategies based on what was actually used
+                
+                # Priority 1: Direct Validation
                 if candidate_info['github_url']:
-                    metadata.strategies_used.append(DiscoveryStrategy.DIRECT_URL)
-                if candidate_info['email']:
-                    metadata.strategies_used.append(DiscoveryStrategy.EMAIL_BASED)
-                if candidate_info['name']:
-                    metadata.strategies_used.append(DiscoveryStrategy.NAME_CONTEXT)
+                    direct_github = await self._validate_github_url(candidate_info['github_url'])
+                    if direct_github:
+                        github_profiles.append(direct_github)
+                        metadata.strategies_used.append(DiscoveryStrategy.DIRECT_URL)
+                
+                # Priority 2: Full Search (if no direct match)
+                if not github_profiles:
+                    github_profiles = await self._discover_github_profiles(candidate_info, options, candidate_data)
+                
+                metadata.github_search_time_ms = (time.time() - github_start) * 1000
             
             # Discover LinkedIn profiles
             if options.search_linkedin:
                 linkedin_start = time.time()
-                linkedin_profiles = await self._discover_linkedin_profiles(candidate_info, options, candidate_data)
-                metadata.linkedin_search_time_ms = (time.time() - linkedin_start) * 1000
-                # Add strategies based on what was actually used
+                
+                # Priority 1: Direct Validation
                 if candidate_info['linkedin_url']:
-                    metadata.strategies_used.append(DiscoveryStrategy.DIRECT_URL)
-                if candidate_info['name']:
-                    metadata.strategies_used.append(DiscoveryStrategy.SEARCH_ENGINE)
+                    direct_linkedin = await self._validate_linkedin_url(candidate_info['linkedin_url'])
+                    if direct_linkedin:
+                        linkedin_profiles.append(direct_linkedin)
+                        metadata.strategies_used.append(DiscoveryStrategy.DIRECT_URL)
+                
+                # Priority 2: Full Search (if no direct match)
+                if not linkedin_profiles:
+                    linkedin_profiles = await self._discover_linkedin_profiles(candidate_info, options, candidate_data)
+                
+                metadata.linkedin_search_time_ms = (time.time() - linkedin_start) * 1000
             
             # Calculate total processing time
             total_time = (time.time() - start_time) * 1000
@@ -295,8 +308,23 @@ class DiscoveryService:
                         github_profiles.append(match)
                         seen_usernames.add(username)
                         self.logger.info("Direct GitHub URL validation successful", username=username, confidence=confidence)
-                else:
-                    self.logger.warning("GitHub profile not found for provided URL", username=username)
+                if username not in seen_usernames:
+                    self.logger.warning("GitHub profile not valid via API for provided URL, using basic fallback", username=username)
+                    # Fallback: Create a basic profile from the URL
+                    basic_profile = GitHubProfile(
+                        username=username,
+                        profile_url=candidate_info['github_url'],
+                        name=candidate_info['name']
+                    )
+                    
+                    match = GitHubProfileMatch(
+                        profile=basic_profile,
+                        confidence=0.9,
+                        match_reasoning="Direct URL from resume (Basic profile fallback)",
+                        discovery_strategy=DiscoveryStrategy.DIRECT_URL
+                    )
+                    github_profiles.append(match)
+                    seen_usernames.add(username)
         
         if candidate_info['email']:
             self.logger.info("Performing email-based GitHub search", email=candidate_info['email'])
@@ -420,6 +448,7 @@ class DiscoveryService:
         if candidate_info['linkedin_url']:
             self.logger.info("Checking provided LinkedIn URL with Playwright", url=candidate_info['linkedin_url'])
             profile_url = self._normalize_linkedin_url(candidate_info['linkedin_url'])
+            
             if profile_url:
                 # Try Playwright first for comprehensive data extraction
                 profile = await self.linkedin_client.extract_profile_data(profile_url)
@@ -441,8 +470,25 @@ class DiscoveryService:
                         linkedin_profiles.append(match)
                         seen_urls.add(profile_url)
                         self.logger.info("Direct LinkedIn URL validation successful", url=profile_url, confidence=confidence)
-                else:
-                    self.logger.warning("LinkedIn profile not found for provided URL", url=profile_url)
+                if profile_url not in seen_urls:
+                    self.logger.warning("LinkedIn profile not valid via crawling for provided URL, using basic fallback", url=profile_url)
+                    # Fallback: Create a basic profile from the URL and candidate info
+                    # This ensures we at least return the link even if scraping fails
+                    basic_profile = LinkedInProfile(
+                        profile_url=profile_url,
+                        name=candidate_info['name'],
+                        headline=f"Professional at {candidate_info['companies'][0]}" if candidate_info['companies'] else "Professional",
+                        location=candidate_info['location']
+                    )
+                    
+                    match = LinkedInProfileMatch(
+                        profile=basic_profile,
+                        confidence=0.9, # High confidence because it came from the resume
+                        match_reasoning="Direct URL from resume (Basic profile fallback)",
+                        discovery_strategy=DiscoveryStrategy.DIRECT_URL
+                    )
+                    linkedin_profiles.append(match)
+                    seen_urls.add(profile_url)
 
         # Strategy 1: Search-based discovery using Playwright
         if not candidate_info['name']:
@@ -627,3 +673,102 @@ class DiscoveryService:
                 return f'https://www.linkedin.com/in/{linkedin_url}'
             else:
                 return f'https://www.{linkedin_url}'
+
+    async def _validate_github_url(self, url: str) -> Optional[GitHubProfileMatch]:
+        """Validate GitHub URL and return profile match."""
+        try:
+            username = self._extract_github_username(url)
+            if not username:
+                return None
+            
+            profile_url = f"https://github.com/{username}"
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.head(profile_url, follow_redirects=True, timeout=5.0)
+                if response.status_code == 200:
+                    repo_analysis = await self._fetch_github_repos_simple(username)
+                    
+                    profile = GitHubProfile(
+                        username=username,
+                        profile_url=profile_url,
+                        name=username,
+                        public_repos=repo_analysis.get('total_repos', 0)
+                    )
+                    
+                    languages_used = repo_analysis.get('languages', {})
+                    frameworks_detected = []
+                    
+                    return GitHubProfileMatch(
+                        profile=profile,
+                        confidence=1.0,
+                        match_reasoning="Direct URL validation through resume extraction",
+                        discovery_strategy=DiscoveryStrategy.DIRECT_URL,
+                        repositories=[],
+                        languages_used=languages_used,
+                        frameworks_detected=frameworks_detected
+                    )
+        except Exception as e:
+            self.logger.warning(f"Direct GitHub validation failed for {url}: {e}")
+        return None
+
+    async def _fetch_github_repos_simple(self, username: str) -> Dict[str, Any]:
+        """Fetch GitHub repos without API token using public endpoints."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f'https://api.github.com/users/{username}/repos',
+                    params={'sort': 'updated', 'per_page': 10},
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    repos = response.json()
+                    languages = {}
+                    for repo in repos:
+                        lang = repo.get('language')
+                        if lang:
+                            languages[lang] = languages.get(lang, 0) + 1
+                    
+                    return {
+                        'total_repos': len(repos),
+                        'languages': languages
+                    }
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch repos for {username}: {e}")
+        
+        return {'total_repos': 0, 'languages': {}}
+
+    async def _validate_linkedin_url(self, url: str) -> Optional[LinkedInProfileMatch]:
+        """Validate LinkedIn URL and return profile match."""
+        try:
+            normalized_url = self._normalize_linkedin_url(url)
+            if not normalized_url:
+                return None
+            
+            parts = normalized_url.rstrip('/').split('/')
+            profile_id = parts[-1] if parts else "unknown"
+            
+            async with httpx.AsyncClient() as client:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+                }
+                # Use GET instead of HEAD (405 error)
+                response = await client.get(normalized_url, follow_redirects=True, headers=headers, timeout=5.0)
+                
+                if response.status_code in [200, 999]:
+                    profile = LinkedInProfile(
+                        profile_url=normalized_url,
+                        name=profile_id.replace('-', ' ').title(),
+                        headline="LinkedIn Member",
+                        location="Unknown"
+                    )
+                    
+                    return LinkedInProfileMatch(
+                        profile=profile,
+                        confidence=1.0,
+                        match_reasoning="Direct URL validation through resume extraction",
+                        discovery_strategy=DiscoveryStrategy.DIRECT_URL
+                    )
+        except Exception as e:
+            self.logger.warning(f"Direct LinkedIn validation failed for {url}: {e}")
+        return None

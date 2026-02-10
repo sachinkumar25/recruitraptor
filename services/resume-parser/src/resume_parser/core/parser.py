@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import structlog
@@ -157,13 +158,19 @@ class ResumeParser:
         }
 
         # Transform Personal Info
+        # Fallback to regex extraction if LLM missed URLs
+        fallback_links = self._extract_social_links_fallback(original_text)
+        
+        linkedin_val = resume.personal_info.linkedin_url or fallback_links.get('linkedin')
+        github_val = resume.personal_info.github_url or fallback_links.get('github')
+
         personal_info_data = {
             'name': {'value': resume.personal_info.name, 'confidence': 1.0},
             'email': {'value': resume.personal_info.email, 'confidence': 1.0},
             'phone': {'value': resume.personal_info.phone, 'confidence': 1.0},
             'location': {'value': resume.personal_info.location, 'confidence': 1.0},
-            'linkedin_url': {'value': resume.personal_info.linkedin_url, 'confidence': 1.0},
-            'github_url': {'value': resume.personal_info.github_url, 'confidence': 1.0},
+            'linkedin_url': {'value': linkedin_val, 'confidence': 1.0},
+            'github_url': {'value': github_val, 'confidence': 1.0},
             'confidence': 1.0
         }
         
@@ -187,3 +194,23 @@ class ResumeParser:
                 'extraction_errors': []
             }
         }
+
+    def _extract_social_links_fallback(self, text: str) -> Dict[str, Optional[str]]:
+        """
+        Extract social links using regex if LLM fails.
+        """
+        links = {'linkedin': None, 'github': None}
+        
+        # LinkedIn regex
+        # Look for linkedin.com/in/username
+        linkedin_match = re.search(r'(https?://(?:www\.)?linkedin\.com/in/[\w\-%]+)', text, re.IGNORECASE)
+        if linkedin_match:
+            links['linkedin'] = linkedin_match.group(1)
+            
+        # GitHub regex
+        # Look for github.com/username
+        github_match = re.search(r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9\-]+)', text, re.IGNORECASE)
+        if github_match:
+            links['github'] = github_match.group(1)
+            
+        return links

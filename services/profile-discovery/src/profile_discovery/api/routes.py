@@ -75,6 +75,9 @@ async def discover_profiles(
         logger.error("Profile discovery failed", 
                     request_id=request_id,
                     error=str(e))
+        # Return 400 for validation-like errors to help debugging
+        if "required" in str(e).lower() or "validation" in str(e).lower():
+             raise HTTPException(status_code=400, detail=f"Validation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Discovery failed: {str(e)}")
 
 
