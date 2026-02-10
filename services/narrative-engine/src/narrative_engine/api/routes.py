@@ -16,12 +16,55 @@ from ..services.narrative_service import narrative_service
 from ..services.llm_service import llm_service
 from ..utils.logger import api_logger, log_api_request, log_api_response, log_error
 
+import re
+from pydantic import BaseModel, HttpUrl
+
+class TextExtractionRequest(BaseModel):
+    url: HttpUrl
+
+class TextExtractionResponse(BaseModel):
+    success: bool
+    text: str
+    error: str = None
+
 router = APIRouter(prefix="/api/v1", tags=["narrative"])
 
 
 async def get_request_id(request: Request) -> str:
     """Extract request ID from headers or generate one."""
     return request.headers.get("X-Request-ID", f"req_{int(time.time() * 1000)}")
+
+@router.post("/extract-text", response_model=TextExtractionResponse)
+async def extract_text_from_url(request: TextExtractionRequest):
+    """Extract text content from a given URL."""
+    try:
+        async with httpx.AsyncClient(verify=False, follow_redirects=True, timeout=10.0) as client:
+            response = await client.get(str(request.url))
+            response.raise_for_status()
+            
+            # Simple text extraction using regex to strip tags
+            # (Matches script/style tags and comments to remove them first)
+            html = response.text
+            
+            # Remove scripts and styles
+            html = re.sub(r'<(script|style).*?</\1>', '', html, flags=re.DOTALL)
+            # Remove comments
+            html = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+            # Remove HTML tags
+            text = re.sub(r'<[^>]+>', '\n', html)
+            # Normalize whitespace
+            text = re.sub(r'\n\s*\n', '\n\n', text).strip()
+            
+            return TextExtractionResponse(
+                success=True,
+                text=text[:5000] # Limit length
+            )
+    except Exception as e:
+        return TextExtractionResponse(
+            success=False,
+            text="",
+            error=str(e)
+        )
 
 
 @router.post("/generate", response_model=NarrativeGenerationResponse)

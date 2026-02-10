@@ -46,24 +46,24 @@ export default function UploadPage() {
         try {
             // Stage 1: Extraction (Parsing)
             setCurrentStage(0); // Extracting Text
+            const parsedData = await RecruitRaptorApi.parseResume(file);
 
-            // We initiate the full API call which handles orchestration
-            // Ideally, we'd want granular progress updates, but for now we'll simulate progress
-            // while fetching, or if the API splits steps we could call them individually.
-            // Our api.ts does: Parse -> Discover -> Enrich
+            // Stage 2: Enriching (Discovery)
+            setCurrentStage(1);
+            // Small delay for UI feedback
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const discoveryResult = await RecruitRaptorApi.discoverProfiles(parsedData);
 
-            // To make the UI feel responsive, we'll start a "simulated" progress interval 
-            // that moves slowly, but jumps to completion when the promise resolves.
-            const progressInterval = setInterval(() => {
-                setCurrentStage(prev => {
-                    if (prev < 2) return prev + 1; // Move to Enrich/Analyze visual state
-                    return prev;
-                });
-            }, 3000);
+            // Stage 3: Analyzing (Enrichment)
+            setCurrentStage(2);
+            await new Promise(resolve => setTimeout(resolve, 800));
+            const enrichedProfile = await RecruitRaptorApi.enrichProfile(parsedData, discoveryResult);
 
-            const enrichedProfile = await RecruitRaptorApi.uploadResume(file);
-
-            clearInterval(progressInterval);
+            // Stage 4: Narrative
+            setCurrentStage(3);
+            await new Promise(resolve => setTimeout(resolve, 800));
+            // Generate bio to complete the pipeline visually
+            await RecruitRaptorApi.generateBioNarrative(enrichedProfile);
 
             // Success!
             setCurrentStage(PIPELINE_STAGES.length); // All stages complete

@@ -277,12 +277,16 @@ class ConflictResolver:
                 resolved_value = self._resolve_skill_discrepancy(skill, sources_with_skill, sources_without_skill)
                 strategy = self._determine_skill_resolution_strategy(sources_with_skill, sources_without_skill)
                 
+                # Build original_values with DataSource keys mapping to presence status
+                original_values_map: Dict[DataSource, Any] = {}
+                for src in sources_with_skill.keys():
+                    original_values_map[src] = f"present: {skill}"
+                for src in sources_without_skill.keys():
+                    original_values_map[src] = f"absent: {skill}"
+                
                 conflict = ConflictResolutionResult(
                     field_name=f"skill_{skill}",
-                    original_values={
-                        "present_in": list(sources_with_skill.keys()),
-                        "absent_in": list(sources_without_skill.keys())
-                    },
+                    original_values=original_values_map,
                     resolved_value=resolved_value,
                     resolution_strategy=strategy,
                     confidence_score=self._calculate_skill_confidence(sources_with_skill, sources_without_skill),
@@ -346,14 +350,17 @@ class ConflictResolver:
              # for the overall history structure if they differ significantly.
              # For this MVP complete implementation, we'll mark it as a resolved conflict favor of LinkedIn
              
+             # Build original_values with DataSource keys mapping to date counts
+             original_values_map: Dict[DataSource, Any] = {
+                 DataSource.RESUME: len(experience_by_source[DataSource.RESUME].get('dates', [])),
+                 DataSource.LINKEDIN: len(experience_by_source[DataSource.LINKEDIN].get('dates', []))
+             }
+             
              conflict = ConflictResolutionResult(
                 field_name="experience_timeline",
-                original_values={
-                    "resume_count": len(experience_by_source[DataSource.RESUME].get('dates', [])),
-                    "linkedin_count": len(experience_by_source[DataSource.LINKEDIN].get('dates', []))
-                },
+                original_values=original_values_map,
                 resolved_value="linkedin_timeline",
-                resolution_strategy=ConflictResolution.LINKEDIN_PRIORITY, # Need to ensure this enum value exists or use generic
+                resolution_strategy=ConflictResolution.LINKEDIN_PRIORITY,
                 confidence_score=0.85, 
                 reasoning="Applied Truth Hierarchy: LinkedIn Dates > Resume Claims"
              )

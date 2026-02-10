@@ -57,7 +57,7 @@ export function Dropzone({ onFileSelect }: DropzoneProps) {
             className={cn(
                 "relative border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer",
                 isDragActive
-                    ? "border-blue-500 bg-blue-50/50 scale-[1.02]"
+                    ? "border-blue-500 bg-blue-50/50 scale-[1.02] animate-pulse ring-4 ring-blue-500/20"
                     : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50",
                 selectedFile ? "bg-blue-50/30 border-blue-200" : ""
             )}
